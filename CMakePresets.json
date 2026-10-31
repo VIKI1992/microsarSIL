@@ -1,0 +1,62 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "linux-gcc",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-gcc",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "linux-clang-asan",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-clang-asan",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "CMAKE_C_COMPILER": "clang", "CMAKE_CXX_COMPILER": "clang++", "SIL_ASAN": "ON" }
+    },
+    {
+      "name": "linux-gcc-tsan",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-gcc-tsan",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "SIL_TSAN": "ON" }
+    },
+    {
+      "name": "windows-msvc",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/windows-msvc"
+    },
+    {
+      "name": "windows-mingw",
+      "generator": "MinGW Makefiles",
+      "binaryDir": "${sourceDir}/build/windows-mingw",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "windows-mingw-br1tools",
+      "inherits": "windows-mingw",
+      "binaryDir": "${sourceDir}/build/windows-mingw-br1tools",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "C:/EcuX/Br1Tools/mingw64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "C:/EcuX/Br1Tools/mingw64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "C:/EcuX/Br1Tools/mingw64/bin/mingw32-make.exe",
+        "SIL_PYTHON": "C:/Users/viktor.marhansky/AppData/Local/Programs/Python/Python313/python.exe"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "linux-gcc", "configurePreset": "linux-gcc" },
+    { "name": "linux-clang-asan", "configurePreset": "linux-clang-asan" },
+    { "name": "linux-gcc-tsan", "configurePreset": "linux-gcc-tsan" },
+    { "name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "RelWithDebInfo" },
+    { "name": "windows-mingw", "configurePreset": "windows-mingw" },
+    { "name": "windows-mingw-br1tools", "configurePreset": "windows-mingw-br1tools" }
+  ],
+  "testPresets": [
+    { "name": "linux-gcc", "configurePreset": "linux-gcc", "output": { "outputOnFailure": true } },
+    { "name": "linux-clang-asan", "configurePreset": "linux-clang-asan", "output": { "outputOnFailure": true } },
+    { "name": "linux-gcc-tsan", "configurePreset": "linux-gcc-tsan", "output": { "outputOnFailure": true } },
+    { "name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "RelWithDebInfo", "output": { "outputOnFailure": true } },
+    { "name": "windows-mingw", "configurePreset": "windows-mingw", "output": { "outputOnFailure": true } },
+    { "name": "windows-mingw-br1tools", "configurePreset": "windows-mingw-br1tools", "output": { "outputOnFailure": true } }
+  ]
+}
