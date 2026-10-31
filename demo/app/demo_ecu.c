@@ -50,13 +50,14 @@ static void button_model(void *arg) {
 /* ---- shared data ------------------------------------------------------------------------- */
 static uint32 g_sharedCounter;      /* protected by Res_Shared on core 0 */
 static uint32 g_crossCoreValue;     /* protected by Spin_Shared */
-static uint32 g_canFrames, g_spiDone, g_buttons, g_core1Events;
+static uint32 g_canFrames, g_spiDone, g_buttons;
+static volatile uint32_t g_core1Events; /* written on core 1, read on core 0 */
 
 /* ---- hooks ------------------------------------------------------------------------------- */
 void StartupHook(void) { sil_log("StartupHook on core %u", (unsigned)GetCoreID()); }
 void ShutdownHook(StatusType Fatalerror) {
     sil_log("ShutdownHook(%u): can=%u spi=%u buttons=%u core1events=%u shared=%u", (unsigned)Fatalerror, g_canFrames, g_spiDone,
-            g_buttons, g_core1Events, g_sharedCounter);
+            g_buttons, (unsigned)sil_atomic_load32(&g_core1Events), g_sharedCounter);
 }
 void ErrorHook(StatusType Error) {
     sil_log("ErrorHook: status %u service 0x%02X", (unsigned)Error, (unsigned)OSErrorGetServiceId());
@@ -137,7 +138,7 @@ TASK(Task_100ms_Core0) {
         n++;
         if ((n % 10u) == 0u)
             sil_log("t=%.3f s: can=%u spi=%u shared=%u core1events=%u", (double)SilOs_ClockNow() / 1e9, g_canFrames, g_spiDone,
-                    g_sharedCounter, g_core1Events);
+                    g_sharedCounter, (unsigned)sil_atomic_load32(&g_core1Events));
         (void)ActivateTask(Task_Bg_Core0);
         (void)ActivateTask(Task_Bg_Core0);
     });
@@ -192,7 +193,7 @@ TASK(Task_Event_Core1) {
     for (;;) {
         (void)WaitEvent(Ev_Trigger_Core1);
         (void)ClearEvent(Ev_Trigger_Core1);
-        RUNNABLE(R_Event_Core1, 150000u, { g_core1Events++; });
+        RUNNABLE(R_Event_Core1, 150000u, { (void)sil_atomic_add32(&g_core1Events, 1u); });
     }
 }
 

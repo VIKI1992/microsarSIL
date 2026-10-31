@@ -547,7 +547,7 @@ static void task_thread(void *arg) {
             sil_sem_wait(t->ctx.run);
             t->ctx.holdsToken = 1u;
         }
-        if (silos_g.shutdown) {
+        if (sil_atomic_load32(&silos_g.shutdown) != 0u) {
             /* park forever */
             sil_sem_wait(t->ctx.run);
             continue;
@@ -626,7 +626,7 @@ static void isr_thread(void *arg) {
             sil_sem_wait(isr->ctx.run);
             isr->ctx.holdsToken = 1u;
         }
-        if (silos_g.shutdown) {
+        if (sil_atomic_load32(&silos_g.shutdown) != 0u) {
             sil_sem_wait(isr->ctx.run);
             continue;
         }
@@ -825,10 +825,34 @@ CoreIdType GetCoreID(void) {
 
 CoreIdType SilOs_CurrentCore(void) { return (silos_self != NULL) ? silos_self->core->id : OS_CORE_ID_INVALID; }
 int SilOs_InIsr(void) { return (silos_self != NULL && silos_self->kind == SILOS_CTX_ISR) ? 1 : 0; }
-int SilOs_IsStarted(CoreIdType core) { return (core < SILOS_MAX_CORES) ? silos_g.cores[core].osStarted : 0; }
-uint64 SilOs_TaskActivations(TaskType task) { return (task < silos_g.cfg->numTasks) ? silos_g.tasks[task].activations : 0u; }
-uint64 SilOs_IsrRuns(ISRType isr) { return (isr < silos_g.cfg->numIsrs) ? silos_g.isrs[isr].runs : 0u; }
-uint64 SilOs_ErrorCount(void) { return silos_g.errorCount; }
+int SilOs_IsStarted(CoreIdType core) {
+    int r;
+    silos_lock();
+    r = (core < SILOS_MAX_CORES) ? silos_g.cores[core].osStarted : 0;
+    silos_unlock();
+    return r;
+}
+uint64 SilOs_TaskActivations(TaskType task) {
+    uint64 r;
+    silos_lock();
+    r = (task < silos_g.cfg->numTasks) ? silos_g.tasks[task].activations : 0u;
+    silos_unlock();
+    return r;
+}
+uint64 SilOs_IsrRuns(ISRType isr) {
+    uint64 r;
+    silos_lock();
+    r = (isr < silos_g.cfg->numIsrs) ? silos_g.isrs[isr].runs : 0u;
+    silos_unlock();
+    return r;
+}
+uint64 SilOs_ErrorCount(void) {
+    uint64 r;
+    silos_lock();
+    r = silos_g.errorCount;
+    silos_unlock();
+    return r;
+}
 
 StatusType Os_GetCoreStartState(CoreIdType CoreID, Os_CoreStartStateType *CoreState, StatusType *Status) {
     if (CoreID >= silos_g.cfg->numCores || CoreState == NULL) {
@@ -933,7 +957,13 @@ void StartOS(AppModeType Mode) {
     idle_loop(core); /* never returns */
 }
 
-AppModeType GetActiveApplicationMode(void) { return silos_g.appMode; }
+AppModeType GetActiveApplicationMode(void) {
+    AppModeType m;
+    silos_lock();
+    m = silos_g.appMode;
+    silos_unlock();
+    return m;
+}
 
 static void shutdown_common(StatusType Error, int allCores) {
     void (*hook)(StatusType) = silos_g.cfg->hooks.shutdownHook;

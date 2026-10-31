@@ -220,14 +220,18 @@ StatusType Os_ClearPendingInterrupt(ISRType ISRID) {
 StatusType Os_IsInterruptSourceEnabled(ISRType ISRID, boolean *IsEnabled) {
     if (ISRID >= silos_g.cfg->numIsrs) return E_OS_ID;
     if (IsEnabled == NULL) return E_OS_PARAM_POINTER;
+    silos_lock();
     *IsEnabled = silos_g.isrs[ISRID].enabled;
+    silos_unlock();
     return E_OK;
 }
 
 StatusType Os_IsInterruptPending(ISRType ISRID, boolean *IsPending) {
     if (ISRID >= silos_g.cfg->numIsrs) return E_OS_ID;
     if (IsPending == NULL) return E_OS_PARAM_POINTER;
+    silos_lock();
     *IsPending = silos_g.isrs[ISRID].pending;
+    silos_unlock();
     return E_OK;
 }
 
@@ -401,10 +405,10 @@ StatusType GetEvent(TaskType TaskID, EventMaskRefType Event) {
     else {
         t = &silos_g.tasks[TaskID];
         if (!t->cfg->extended) st = E_OS_ACCESS;
-        else if (t->state == SUSPENDED) st = E_OS_STATE;
         else {
             silos_lock();
-            *Event = t->events;
+            if (t->state == SUSPENDED) st = E_OS_STATE;
+            else *Event = t->events;
             silos_unlock();
         }
     }

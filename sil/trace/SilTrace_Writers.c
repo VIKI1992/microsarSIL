@@ -155,26 +155,38 @@ int SilTrace_WritePerfetto(const char *path) {
     size_t i;
     unsigned c;
     char nb[64];
-    /* open slice bookkeeping */
-    uint64_t taskStart[MAX_CORES][MAX_OBJ];      /* virtual start of the current run segment per task */
-    uint64_t taskHost[MAX_CORES][MAX_OBJ];
-    uint64_t isrStart[MAX_CORES][MAX_OBJ], isrHost[MAX_CORES][MAX_OBJ];
-    uint64_t runStart[MAX_CORES][MAX_OBJ], runHost[MAX_CORES][MAX_OBJ];
-    uint64_t idleStart[MAX_CORES], idleHost[MAX_CORES];
-    uint64_t actFlow[MAX_OBJ];
+    /* open slice bookkeeping (heap: ~1.5 MB, too much for the default MSVC stack) */
+    typedef struct {
+        uint64_t taskStart[MAX_CORES][MAX_OBJ]; /* virtual start of the current run segment per task */
+        uint64_t taskHost[MAX_CORES][MAX_OBJ];
+        uint64_t isrStart[MAX_CORES][MAX_OBJ], isrHost[MAX_CORES][MAX_OBJ];
+        uint64_t runStart[MAX_CORES][MAX_OBJ], runHost[MAX_CORES][MAX_OBJ];
+        uint64_t idleStart[MAX_CORES], idleHost[MAX_CORES];
+        uint64_t actFlow[MAX_OBJ];
+    } Book;
+    Book *b;
     uint64_t flowCounter = 1;
     unsigned numCores = SilTrace_NumCores();
     if (f == NULL) return -1;
+    b = (Book *)calloc(1, sizeof(Book));
+    if (b == NULL) {
+        fclose(f);
+        return -1;
+    }
     if (numCores > MAX_CORES) numCores = MAX_CORES;
-    memset(taskStart, 0xFF, sizeof(taskStart));
-    memset(isrStart, 0xFF, sizeof(isrStart));
-    memset(runStart, 0xFF, sizeof(runStart));
-    memset(idleStart, 0xFF, sizeof(idleStart));
-    memset(actFlow, 0, sizeof(actFlow));
-    memset(taskHost, 0, sizeof(taskHost));
-    memset(isrHost, 0, sizeof(isrHost));
-    memset(runHost, 0, sizeof(runHost));
-    memset(idleHost, 0, sizeof(idleHost));
+    memset(b->taskStart, 0xFF, sizeof(b->taskStart));
+    memset(b->isrStart, 0xFF, sizeof(b->isrStart));
+    memset(b->runStart, 0xFF, sizeof(b->runStart));
+    memset(b->idleStart, 0xFF, sizeof(b->idleStart));
+#define taskStart (b->taskStart)
+#define taskHost (b->taskHost)
+#define isrStart (b->isrStart)
+#define isrHost (b->isrHost)
+#define runStart (b->runStart)
+#define runHost (b->runHost)
+#define idleStart (b->idleStart)
+#define idleHost (b->idleHost)
+#define actFlow (b->actFlow)
     o.f = f;
     o.first = 1;
     fputs("{\"displayTimeUnit\":\"ns\",\"traceEvents\":[\n", f);
@@ -300,6 +312,16 @@ int SilTrace_WritePerfetto(const char *path) {
         }
         (void)hts;
     }
+#undef taskStart
+#undef taskHost
+#undef isrStart
+#undef isrHost
+#undef runStart
+#undef runHost
+#undef idleStart
+#undef idleHost
+#undef actFlow
+    free(b);
     free(v.recs);
     fputs("\n]}\n", f);
     fclose(f);

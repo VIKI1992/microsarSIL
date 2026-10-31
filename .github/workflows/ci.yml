@@ -33,7 +33,7 @@ jobs:
           msystem: MINGW64
           update: true
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-python mingw-w64-x86_64-python-pytest
-      - run: cmake -S . -B build/mingw -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - run: cmake -S . -B build/mingw -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSIL_PYTHON="$(python -c 'import sys; print(sys.executable)')"
       - run: cmake --build build/mingw -j 4
       - run: ctest --test-dir build/mingw --output-on-failure
 

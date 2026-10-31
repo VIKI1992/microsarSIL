@@ -8,6 +8,8 @@
 #include "Os_Api.h"
 #include "SilOs_Cfg.h"
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

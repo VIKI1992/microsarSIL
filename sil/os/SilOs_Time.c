@@ -479,7 +479,9 @@ StatusType GetScheduleTableStatus(ScheduleTableType ScheduleTableID, ScheduleTab
         silos_error(OSServiceId_GetScheduleTableStatus, E_OS_ID, ScheduleTableID, 0, 0);
         return E_OS_ID;
     }
+    silos_lock();
     *ScheduleStatus = silos_g.schedTbls[ScheduleTableID].status;
+    silos_unlock();
     return E_OK;
 }
 
