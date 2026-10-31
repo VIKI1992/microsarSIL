@@ -1,6 +1,9 @@
 /* sil_runtime.c - command line runtime around SilOs. */
 #include "sil_runtime.h"
 #include "SilCan.h"
+#include "SilIo.h"
+#include "SilMcal.h"
+#include "Mcu.h"
 #include "SilTrace.h"
 #include "sil_ctrl.h"
 #include "sil_port.h"
@@ -20,7 +23,8 @@ void SilRt_Usage(const char *prog) {
             "  --duration=<seconds>   stop after this virtual time (0 = until ShutdownOS)\n"
             "  --trace=<file.siltrace> --perfetto=<file.json> --btf=<file.btf> --rimac=<dir>\n"
             "  --trace-records=<n> --pin-cores --quiet --help\n"
-            "  --control[=[host:]port] --paused --can<N>=<spec> --can=<spec>\n",
+            "  --control[=[host:]port] --paused --can<N>=<spec> --can=<spec>\n"
+            "  --nv=<dir> --io=<key>=<value> (repeatable)\n",
             prog);
 }
 
@@ -96,8 +100,12 @@ int SilRt_ParseArgs(SilRt_Options *opt, int argc, char **argv) {
                 return -1;
             }
             opt->canSpec[n] = eq + 1;
+        } else if (starts(a, "--nv=")) {
+            opt->nvDir = a + 5;
+        } else if (starts(a, "--io=")) {
+            if (opt->numIoInit < 32u) opt->ioInit[opt->numIoInit++] = a + 5;
         } else if (strcmp(a, "--resume") == 0) {
-            /* reserved for reset emulation */
+            opt->resumed = 1;
         } else {
             fprintf(stderr, "unknown option %s\n", a);
             SilRt_Usage(argv[0]);
@@ -133,6 +141,41 @@ static void on_signal(int sig) {
     SilOs_RequestStop(130);
 }
 
+/* Mcu_PerformReset: write the traces and start the same process again (ECU reset emulation) */
+static void on_reset(void) {
+    SilRt_WriteTraces();
+    SilCtrl_Stop();
+    fflush(stdout);
+    fflush(stderr);
+    if (sil_process_reexec(g_opt.argc, g_opt.argv, g_opt.resumed ? NULL : "--resume") != 0) sil_log("reset: re-exec failed");
+    sil_process_exit(0x52);
+}
+
+static void apply_io_init(void) {
+    unsigned i;
+    for (i = 0; i < g_opt.numIoInit; ++i) {
+        char key[160];
+        const char *eq = strchr(g_opt.ioInit[i], '=');
+        SilIo_Kind kind;
+        uint32 id;
+        uint8 field;
+        size_t n;
+        if (eq == NULL) {
+            sil_log("--io=%s: expected key=value", g_opt.ioInit[i]);
+            continue;
+        }
+        n = (size_t)(eq - g_opt.ioInit[i]);
+        if (n >= sizeof key) n = sizeof key - 1u;
+        memcpy(key, g_opt.ioInit[i], n);
+        key[n] = '\0';
+        if (SilIo_Parse(key, &kind, &id, &field) != 0) {
+            sil_log("--io=%s: unknown key", g_opt.ioInit[i]);
+            continue;
+        }
+        SilIo_Set(kind, id, field, atof(eq + 1));
+    }
+}
+
 int SilRt_Run(const SilRt_Options *opt, SilOs_CoreEntryFn entry) {
     int code;
     g_opt = *opt;
@@ -145,6 +188,10 @@ int SilRt_Run(const SilRt_Options *opt, SilOs_CoreEntryFn entry) {
     SilOs_SetShutdownCallback(on_shutdown);
     if (g_opt.paused) SilOs_SetTimeLimit(0u);
     SilCan_Setup();
+    if (g_opt.nvDir != NULL) SilNv_SetDir(g_opt.nvDir);
+    SilMcu_SetResetHook(on_reset);
+    SilMcu_SetResetReason(g_opt.resumed ? (uint32)MCU_SW_RESET : (uint32)MCU_POWER_ON_RESET);
+    apply_io_init();
     {
         unsigned n;
         for (n = 0; n < SilCan_NumControllers(); ++n) {

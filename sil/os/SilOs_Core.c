@@ -280,6 +280,9 @@ static void realtime_driver(void *arg) {
     }
 }
 
+/* virtual timer callbacks run on whichever thread advances the clock: not an OS context */
+static SIL_THREAD_LOCAL uint32 silos_vtimerDepth;
+
 uint32 SilOs_TimerSchedule(uint64 delayNs, SilOs_TimerFn fn, void *arg) {
     uint32 i, h = 0;
     silos_lock();
@@ -332,7 +335,9 @@ void silos_vtimers_fire_locked(void) {
             if (fn != NULL) {
                 silos_g.firing++;
                 silos_unlock();
+                silos_vtimerDepth++;
                 fn(arg);
+                silos_vtimerDepth--;
                 silos_lock();
                 silos_g.firing--;
             }
@@ -461,6 +466,45 @@ void silos_xsig_process_locked(SilOs_Core *core) {
         r->done = 1u;
     }
     silos_notify();
+}
+
+/* soft ISR: runs queued peripheral callbacks in Cat2 ISR context */
+void silos_softisr_body(void) {
+    SilOs_Core *core = silos_self->core;
+    for (;;) {
+        SilOs_TimerFn fn;
+        void *arg;
+        silos_lock();
+        if (core->softCount == 0u) {
+            silos_unlock();
+            return;
+        }
+        fn = core->softQueue[core->softHead].fn;
+        arg = core->softQueue[core->softHead].arg;
+        core->softHead = (core->softHead + 1u) % SILOS_SOFT_QUEUE;
+        core->softCount--;
+        silos_unlock();
+        if (fn != NULL) fn(arg);
+    }
+}
+
+int SilOs_RunInIsr(CoreIdType core, SilOs_TimerFn fn, void *arg) {
+    SilOs_Core *c;
+    uint32 isr;
+    if (core >= silos_g.cfg->numCores || fn == NULL) return 0;
+    c = &silos_g.cores[core];
+    silos_lock();
+    isr = c->softIsr;
+    if (isr == SILOS_INVALID_ID || c->softCount >= SILOS_SOFT_QUEUE) {
+        silos_unlock();
+        return 0;
+    }
+    c->softQueue[(c->softHead + c->softCount) % SILOS_SOFT_QUEUE].fn = fn;
+    c->softQueue[(c->softHead + c->softCount) % SILOS_SOFT_QUEUE].arg = arg;
+    c->softCount++;
+    silos_unlock();
+    SilOs_RaiseIrq((ISRType)isr);
+    return 1;
 }
 
 void silos_xsignal_isr_body(void) {
@@ -642,6 +686,7 @@ static void isr_thread(void *arg) {
         isr->ctx.extraSuspendAll = 0u;
         if (isr->cfg->kind == 1u) silos_timer_isr_body();
         else if (isr->cfg->kind == 2u) silos_xsignal_isr_body();
+        else if (isr->cfg->kind == 3u) silos_softisr_body();
         else if (isr->cfg->entry != NULL) isr->cfg->entry();
         silos_lock();
         /* ISR end: release anything left behind */
@@ -713,6 +758,7 @@ static void init_objects(void) {
         isr->urgency = isr->cfg->priority;
         if (isr->cfg->kind == 1u) silos_g.cores[isr->cfg->core].timerIsr = i;
         if (isr->cfg->kind == 2u) silos_g.cores[isr->cfg->core].xsigIsr = i;
+        if (isr->cfg->kind == 3u) silos_g.cores[isr->cfg->core].softIsr = i;
         SilTrace_SetName(SILTRACE_NAME_ISR, i, isr->cfg->name);
     }
     for (i = 0; i < cfg->numAlarms; ++i) SilTrace_SetName(SILTRACE_NAME_ALARM, i, cfg->alarms[i].name);
@@ -748,6 +794,8 @@ void SilOs_Setup(const SilOs_RuntimeOptions *opt, SilOs_CoreEntryFn coreEntry) {
         core->consumeTarget = UINT64_MAX;
         core->xsigIsr = SILOS_INVALID_ID;
         core->timerIsr = SILOS_INVALID_ID;
+        core->softIsr = SILOS_INVALID_ID;
+        core->softHead = core->softCount = 0u;
         core->idleState = SILOS_STATE_BUSY;
         snprintf(name, sizeof name, "Core%u", (unsigned)c);
         if (c < silos_g.cfg->numCores) SilTrace_SetName(SILTRACE_NAME_CORE, c, name);
@@ -828,6 +876,8 @@ CoreIdType GetCoreID(void) {
     if (silos_g.cfg != NULL && silos_g.cfg->numCores == 1u) return 0u;
     return OS_CORE_ID_INVALID;
 }
+
+int SilOs_InOsContext(void) { return (silos_self != NULL && silos_self->kind != SILOS_CTX_IDLE && silos_vtimerDepth == 0u) ? 1 : 0; }
 
 CoreIdType SilOs_CurrentCore(void) { return (silos_self != NULL) ? silos_self->core->id : OS_CORE_ID_INVALID; }
 int SilOs_InIsr(void) { return (silos_self != NULL && silos_self->kind == SILOS_CTX_ISR) ? 1 : 0; }

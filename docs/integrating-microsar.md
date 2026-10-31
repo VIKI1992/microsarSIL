@@ -56,18 +56,27 @@ small SIL copy of that file section.
 | Module | Must provide | Model |
 |---|---|---|
 | Can_43_FLEXCAN (**done, M3**) | `Init, SetControllerMode, Write, MainFunction_{Read,Write,BusOff,Mode,Wakeup}(+_CanMainFunctionRWPeriods_n), GetControllerErrorState, GetControllerRx/TxErrorCounter, SetBaudrate, DisableControllerInterrupts`, `CAN<n>_ORED*/EnhancedData_IRQHandler` | per controller queue + bus backend (UDP, SIL Kit, SocketCAN); RX in ISR context via `CanIf_RxIndication`, TX confirmation via `CanIf_TxConfirmation` |
-| Lin (Vector driver replaced) | `Lin_Init/InitMemory/SendFrame/GetStatus/GoToSleep(Internal)/Wakeup(Internal)/CheckWakeup/Interrupt` | 4 master channels, frame response from LDF or Python slaves, `LinIsr_n` through `Lin_Interrupt` |
-| Spi | `Init, SetupEB, SyncTransmit, AsyncTransmit, GetSequenceResult, GetStatus, GetHWUnitStatus, SetAsyncMode, SetHWUnitAsyncMode, MainFunction_Handling`, `Spi_Ip_SPI_{2,3,5,7}_IRQHandler` | sequences/jobs/channels from `SpiSequence`/`SpiJob`/`SpiChannel`; slave models for ADS7038 (x10), BTS710336 (x3), BTS722204 (x2), DRV8910, L9305 |
-| Dio, Port, Pwm, Icu, Adc, Gpt | the APIs listed in the inventory | `VirtualIo` named values settable from the control server; Icu edges and Adc groups raise their eMIOS/ADC ISRs |
-| I2c, Uart | `I2c_SyncTransmit/AsyncTransmit/GetStatus/Init`, `Uart_SyncSend/AsyncSend/AsyncReceive/Abort/GetStatus/Init` | PCA9539 port expander and temperature sensor register models; UART to stdout |
-| Mcu, Platform, OsIf, Pit_Ip, Mcl | `Mcu_Init/InitClock/GetPllStatus/DistributePllClock/SetMode/PerformReset/GetResetReason`, `Platform_Init/GetCoreID/Mru*`, `OsIf_Init/GetCoreID/GetUserId`, `Pit_Ip_Get/SetLifetimeTimer` | stubs; `PerformReset` re-executes the process; lifetime timer = virtual clock at 100 MHz |
-| Fee (NXP) / MemAcc / Mem_43_* | `Fee_*` job API, `MemAcc_*`, `Mem_43_*_Init/MainFunction` | file-backed emulation, persists across resets |
+| Lin (Vector driver replaced, **done, M4**) | `Lin_Init/InitMemory/SendFrame/GetStatus/GoToSleep(Internal)/Wakeup(Internal)/CheckWakeup/Interrupt` | 4 master channels, frame response from LDF or Python slaves, `LinIsr_n` through `Lin_Interrupt` |
+| Spi (**done, M4**; device models open) | `Init, SetupEB, SyncTransmit, AsyncTransmit, GetSequenceResult, GetStatus, GetHWUnitStatus, SetAsyncMode, SetHWUnitAsyncMode, MainFunction_Handling`, `Spi_Ip_SPI_{2,3,5,7}_IRQHandler` | sequences/jobs/channels from `SpiSequence`/`SpiJob`/`SpiChannel`; slave models for ADS7038 (x10), BTS710336 (x3), BTS722204 (x2), DRV8910, L9305 |
+| Dio, Port, Pwm, Icu, Adc, Gpt (**done, M4**) | the APIs listed in the inventory | `VirtualIo` named values settable from the control server; Icu edges and Adc groups raise their eMIOS/ADC ISRs |
+| I2c, Uart (**done, M4**: register file slaves, UART to the log) | `I2c_SyncTransmit/AsyncTransmit/GetStatus/Init`, `Uart_SyncSend/AsyncSend/AsyncReceive/Abort/GetStatus/Init` | PCA9539 port expander and temperature sensor register models; UART to stdout |
+| Mcu, Platform, OsIf, Pit_Ip, Mcl (**done, M4**) | `Mcu_Init/InitClock/GetPllStatus/DistributePllClock/SetMode/PerformReset/GetResetReason`, `Platform_Init/GetCoreID/Mru*`, `OsIf_Init/GetCoreID/GetUserId`, `Pit_Ip_Get/SetLifetimeTimer` | stubs; `PerformReset` re-executes the process; lifetime timer = virtual clock at 100 MHz |
+| Fee (NXP) / MemAcc / Mem_43_* (**done, M4**) | `Fee_*` job API, `MemAcc_*`, `Mem_43_*_Init/MainFunction` | file-backed emulation, persists across resets |
 | Crypto_43_HSE, Hse_Ip | `Init, MainFunction, KeyElementGet, Exts_FormatKeyCatalogs`, `Hse_Ip_GetHseStatus/SendHseEvent` | software stand-in completing jobs (optionally through vSecPrim) |
 | eMcem, sBoot, sCheck, Bist, SafetyBase, Wdg stub | listed APIs | stubs returning "no fault" |
 
 `Generated_BSW/include/<Mod>_Cfg.h` are replaced by SIL versions generated from the MCAL ECUC
 files so that the symbolic names (`DioConf_DioChannel_*`, `SpiConf_SpiSequence_*`, ...) keep their
 values.
+
+Peripheral tables: `tools/gen_periph_cfg.py -o <gen> Config/ECUC/Cabin_ECU_{Dio,Adc,Pwm,Icu,Gpt,Spi,Fee,MemAcc,Mem,I2c,Uart,Lin}_*_ecuc.arxml`
+(`silos_add_ecu` runs it on the ARXML list). It also emits the handler functions of the SPI units, I2C
+and UART channels and the `ISR(LinIsr_<n>)` bodies, so `Lin_Lcfg.c` of the Vector driver is not compiled.
+Interrupt handlers no virtual peripheral serves (`ETIMER_1_0_CH4_IRQ`, `EMIOS1_CH3_IRQ`, `I3c0_Isr`, ...)
+get empty bodies through `--isr-stubs NAME,...`; the Icu/Pwm models run their notifications through the
+soft ISR instead. Notification functions named in the ECUC (`BTS7103_SpiSequence1WriteVerifyEndNotification`,
+`IcuChannel_HALL4_EdgeDetection`, `NvM_JobEndNotification`, ...) are declared extern and must exist in the
+linked project code.
 
 CAN specifics: `Can_43_FLEXCAN_Init(NULL_PTR)` as the project calls it is accepted;
 `tools/gen_can_cfg.py --channels 13` emits handler functions for FlexCAN channels the OS references

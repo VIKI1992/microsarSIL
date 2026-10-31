@@ -169,3 +169,63 @@ class SilControl:
     def can_bus(self, ctrl: int, spec: str) -> None:
         """Attach a bus backend: null | loop:<name> | udp[:<group>:<port>]. ctrl -1 = all controllers."""
         self.call("can_bus", ctrl=ctrl, spec=spec)
+
+    # ---- virtual I/O ----------------------------------------------------------
+    def io_set(self, key: str, value: float) -> float:
+        """Set a virtual input: "dio.5", "adc.1", "icu.0.freq", "DioConf_DioChannel_BUTTON", ... Returns the stored value."""
+        return float(self.call("io_set", key=key, value=value)["value"])
+
+    def io_get(self, key: str) -> float:
+        return float(self.call("io_get", key=key)["value"])
+
+    def io_list(self) -> Dict[str, float]:
+        """Every I/O field that has been set, as {key: value} (symbolic names where known)."""
+        out: Dict[str, float] = {}
+        for e in self.call("io_list")["entries"]:
+            out[e["key"]] = float(e["value"])
+            if e.get("symbol"):
+                out[e["symbol"] + e["key"][e["key"].rindex("."):]] = float(e["value"])
+        return out
+
+    # ---- peripheral traffic -----------------------------------------------------
+    def periph_recv(self, max: int = 256) -> List["PeriphEvent"]:
+        """SPI transfers, I2C transactions, UART bytes and LIN frames seen since the previous call."""
+        rep = self.call("periph_recv", max=max)
+        return [PeriphEvent(int(e["t_ns"]), str(e["kind"]), int(e["channel"]), int(e["dir"]), int(e["id"]), bytes.fromhex(e["tx"]),
+                            bytes.fromhex(e["rx"])) for e in rep["events"]]
+
+    def reg_write(self, address: int, reg: int, data: Union[bytes, Sequence[int]], bus: int = 1) -> None:
+        """Preload a register file device (bus 1 = I2C slave address, bus 0 = SPI device index)."""
+        self.call("reg_write", bus=bus, device=address, reg=reg, data=bytes(data).hex())
+
+    def reg_read(self, address: int, reg: int, length: int = 1, bus: int = 1) -> bytes:
+        return bytes.fromhex(self.call("reg_read", bus=bus, device=address, reg=reg, len=length)["data"])
+
+    def uart_send(self, channel: int, data: Union[bytes, str]) -> None:
+        if isinstance(data, str):
+            self.call("uart_send", channel=channel, text=data)
+        else:
+            self.call("uart_send", channel=channel, data=bytes(data).hex())
+
+    def uart_recv(self, channel: int = 0) -> bytes:
+        """Bytes the ECU sent on the channel since the previous call."""
+        return bytes.fromhex(self.call("uart_recv", channel=channel)["data"])
+
+    def lin_response(self, channel: int, pid: int, data: Union[bytes, Sequence[int]]) -> None:
+        """Slave response the virtual LIN bus answers to a header with this PID (empty data removes it)."""
+        self.call("lin_response", channel=channel, pid=pid, data=bytes(data).hex())
+
+    def spi_model(self, device: int, model: str) -> None:
+        """Slave model of an SPI external device: echo | zero | ones | regfile."""
+        self.call("spi_model", device=device, model=model)
+
+
+@dataclass
+class PeriphEvent:
+    t_ns: int
+    kind: str        # spi | i2c | uart | lin
+    channel: int     # spi: device index
+    dir: int         # 0 ecu -> world, 1 world -> ecu, 2 both (spi)
+    id: int          # i2c address, lin pid, spi sequence
+    tx: bytes
+    rx: bytes

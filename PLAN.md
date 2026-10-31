@@ -15,7 +15,7 @@ below come from it.
 | M1 SilOs single core, IRQ controller, ECUC generator, task tracing | **done** (103 semantics checks in `tests/unit/test_os.c`) |
 | M2 multi-core (XSignal, spinlocks, barriers, IOC, idle barrier) | **done** for the mechanisms the reference project uses; `--lockstep-cores` and CPU pinning tests open |
 | M3 virtual CAN, UDP backend, control server, pytest package | **done** (`sil/mcal/src/Can_43_FLEXCAN.c`, `sil/bus`, `sil/ctrl`, `python/microsarsil`, `tests/sil`; SocketCAN and SIL Kit moved to M4) |
-| M4 SPI + peripheral models, SIL Kit, virtual LIN, remaining MCAL | next |
+| M4 SPI + peripheral models, virtual LIN, remaining MCAL | **done** except SIL Kit and SocketCAN (`sil/mcal/src/*.c`, `sil/periph`, `tools/gen_periph_cfg.py`; bus bridges moved to M6) |
 | M5 profiling depth (Rte_Hook.c, flows, stats, ET model) | partly done: `siltrace.py stats`, Perfetto host-cost view, Rimac `.bin` export, `SilOs_ConsumeTime`; `gen_rte_hooks.py` open |
 | M6 real SIP integration kit | `check_sip.py`, `gen_os_cfg.py`, `gen_mcal_cfg.py` verified on the Cabin ECU; host compile probe: 43/45 project files (all Vector BSW, full RTE, CDDs) syntax-check on the host with `sil/hal` + `sil/mcal/inc` headers; virtual MCAL implementations and `cmake/Sip.cmake` open |
 
@@ -162,14 +162,24 @@ microsarSIL/
   `sil_pytest`; the demo got a CanIf stand-in and two controllers wired back to back.
 - Open: `io.set/get` (needs the M4 VirtualIo), SocketCAN, a deterministic trace hash.
 
-### M4: SPI + peripheral models, SIL Kit, virtual LIN, remaining MCAL
-- Virtual `Spi` with `ISpiSlave` models for the Cabin devices (ADS7038, BTS7103/7222 supervisors,
-  DRV8910, L9305) and the SPI unit ISRs; `Dio/Port/Pwm/Icu/Adc/Gpt/I2c/Uart` on `VirtualIo`;
-  `Mcu/Platform/OsIf/Pit_Ip/Mcl` stubs with the lifetime timer on the virtual clock; file-backed
-  `Fee` replacing NXP Fee + MemAcc + Mem_43_*; Crypto stand-in; safety module stubs.
-- SIL Kit loader + CAN/LIN participants + time sync (`--time=silkit`); virtual `Lin` (4 master
-  channels, LDF driven responses, Python slaves).
-- SocketCAN backend on Linux; SIL Kit CAN participant as the CANoe bridge.
+### M4: SPI + peripheral models, virtual LIN, remaining MCAL (done 2026-10-31, bus bridges open)
+- `sil/periph/SilIo.c`: registry of (kind, id, field) values for Dio, Adc, Pwm and Icu with change
+  subscribers; control server `io_set/io_get/io_list`, runtime `--io=key=value`, symbolic names from
+  the generated table (`DioConf_DioChannel_*`, `AdcConf_AdcChannel_*`, ...).
+- `sil/mcal/src`: Dio/Port, Adc, Pwm, Icu, Gpt, Spi, CDD_I2c, CDD_Uart, Fee, MemAcc (+ Mem_43_* stubs),
+  Lin, Mcu/Platform/OsIf/Pit_Ip/Mcl. Models complete asynchronous work on virtual timers and run
+  notifications through `SilOs_RunInIsr` (one OS internal soft ISR per core, kind 3, lowest urgency)
+  or through the OS ISR named by the handler (`Spi_Ip_SPI_<n>_IRQHandler`, `LinIsr_<n>`, ...).
+  `tools/gen_periph_cfg.py` builds `SilMcal_Cfg.c` from the MCAL ECUC files (handler functions, ISR bodies,
+  notification externs, name table); verified on the Cabin ECU (Dio values equal the project's `Dio_Cfg.h`).
+- SPI slave models: echo/zero/ones/register file built in, C callback (`SilSpi_SetSlave`) for device
+  specific models (ADS7038, BTS7103/7222, DRV8910, L9305 are M6 work when their CDDs are compiled).
+- Fee/MemAcc images under `--nv=<dir>` persist across runs and across `Mcu_PerformReset` (process re-exec
+  with `--resume`, reset reason `MCU_SW_RESET`).
+- `tests/sil/test_periph.py`: I/O registry, ADC -> PWM, ICU measurement/counting/edges, GPT, SPI models,
+  I2C register device, LIN frames, Fee persistence, `--io` option.
+- Open: SIL Kit CAN/LIN participants (`--time=silkit`), SocketCAN backend, `io.set` for Icu timestamp
+  buffers, Crypto_43_HSE stand-in (needs a default `Crypto_GeneralTypes.h`), safety module stubs.
 
 ### M5: profiling depth
 - `gen_rte_hooks.py` (`Rte_Hook.c`), flow events (activation -> start, CAN RX -> runnable -> TX),
@@ -201,5 +211,6 @@ microsarSIL/
   `demo_runs_2s` (virtual time with Perfetto/BTF output), `demo_realtime_1s` (realtime x4),
   `tools_pytest` (ECUC parser, generators on demo and Cabin ECU configs, idempotence),
   `sil_pytest` (control server stepping is exact and repeatable, CAN command/reply over the in-process
-  link and over UDP multicast, python-can interface, bus-off recovery, clean stop).
+  link and over UDP multicast, python-can interface, bus-off recovery, clean stop, every virtual
+  peripheral through the I/O registry, Fee persistence across runs).
 - Performance: 10 s of virtual time of the demo (two cores, ~40k trace events/s) runs in 0.9 s wall.

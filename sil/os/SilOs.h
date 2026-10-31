@@ -66,6 +66,9 @@ int SilOs_WaitStarted(uint64 hostTimeoutNs);
 /* Interrupt injection ----------------------------------------------------- */
 /* Thread safe, callable from any host thread, task, ISR or timer callback. */
 void SilOs_RaiseIrq(ISRType isr);
+/* Run fn(arg) in the context of the OS internal soft ISR of `core` (a Cat2 ISR the generator adds per
+ * core as SilOs_SoftIsr_<core>). Thread safe. Returns 0 if the core has no soft ISR or the queue is full. */
+int SilOs_RunInIsr(CoreIdType core, SilOs_TimerFn fn, void *arg);
 /* Look up objects by name. Return the object count (invalid id) if unknown. */
 ISRType SilOs_IsrByName(const char *name);
 /* By OsIsrSpecialFunctionName (the driver handler, e.g. CAN0_ORED_0_31_MB_IRQHandler), then by name. */
@@ -90,6 +93,8 @@ void SilOs_UserEvent(uint32 id, uint32 aux);
 /* Introspection ----------------------------------------------------------- */
 CoreIdType SilOs_CurrentCore(void);     /* OS_CORE_ID_INVALID from foreign threads */
 int SilOs_InIsr(void);
+/* 1 when called from a task or Cat2 ISR; 0 from the idle/startup context, timer callbacks and foreign threads. */
+int SilOs_InOsContext(void);
 int SilOs_IsStarted(CoreIdType core);
 uint64 SilOs_TaskActivations(TaskType task);
 uint64 SilOs_IsrRuns(ISRType isr);

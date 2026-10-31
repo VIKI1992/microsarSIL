@@ -20,10 +20,10 @@ def test_demo_parses():
     e = Ecuc.load([DEMO])
     os_ = e.module("Os")
     assert len(os_.top("OsTask")) == 12
-    assert len(os_.find("OsIsr")) == 13
+    assert len(os_.find("OsIsr")) == 18
     t = os_.byname("Task_1ms_Core0")
     assert t is not None and t.getint("OsTaskPriority") == 30
-    assert t.ref("OsTaskEventRef") == ["Ev_1ms", "Ev_CanRx", "Ev_SpiDone"]
+    assert t.ref("OsTaskEventRef") == ["Ev_1ms", "Ev_CanRx", "Ev_SpiDone", "Ev_NvDone"]
 
 
 def test_demo_generate(tmp_path):
@@ -60,7 +60,8 @@ def test_cabin_ecu_generate(tmp_path):
     types = (tmp_path / "Os_Types_Lcfg.h").read_text()
     lcfg = (tmp_path / "Os_Lcfg.c").read_text()
     cfg = (tmp_path / "Os_Cfg.h").read_text()
-    assert "OS_TASKID_COUNT = 18" in types and "OS_ISRID_COUNT = 71" in types and "OS_ALARMID_COUNT = 101" in types
+    # 71 configured ISRs plus one SilOs soft ISR per core
+    assert "OS_TASKID_COUNT = 18" in types and "OS_ISRID_COUNT = 73" in types and "OS_ALARMID_COUNT = 101" in types
     assert '"ApplicationRunTask_0_10ms_Core1", Os_Task_ApplicationRunTask_0_10ms_Core1, 12u, 1u' in lcfg
     assert "#define Rte_Ev_WP_ApplicationRunTask_50_5000ms_Core1 ((EventMaskType)2uLL)" in cfg
     assert lcfg.count("SILOS_LOCK_CAT2_INTERRUPTS") == 72 and lcfg.count("SILOS_LOCK_NOTHING") == 12

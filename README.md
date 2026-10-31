@@ -9,7 +9,7 @@ CMake options (see `docs/integrating-microsar.md`).
 Reference project: the BR1 Cabin ECU (`C:\br1_cabin_ecu`, MICROSAR Classic on NXP S32E288, two
 Cortex-R52 cores). Its inventory is in `docs/reference-project-br1-cabin.md`; the plan in `PLAN.md`.
 
-## What works today (M0 to M3 of the plan)
+## What works today (M0 to M4 of the plan)
 
 - `sil/os` **SilOs**: OSEK/AUTOSAR OS API (tasks basic/extended, FULL/NON, multiple activation,
   events, resources with ceiling, alarms incl. autostart, hardware and software counters, schedule
@@ -46,7 +46,23 @@ Cortex-R52 cores). Its inventory is in `docs/reference-project-br1-cabin.md`; th
 - `python/microsarsil`: `SilProcess` (starts an ECU and finds its control port), `SilControl` (the
   commands above), `SilUdpSocket` (the UDP bus without dependencies), a python-can interface
   (`can.Bus(interface="silcan", channel="239.0.0.1:52000")`) and pytest fixtures (`sil_exe`, `sil_ecu`).
+- `sil/mcal/src` **virtual MCAL** with the NXP RTD API names: Dio/Port, Adc (group conversions with
+  virtual conversion time and notifications), Pwm, Icu (edge counting, period/duty measurement,
+  timestamps, edge notifications from a per-channel signal generator or a level set from outside),
+  Gpt, Spi (sequences/jobs/channels from the ECUC, synchronous and asynchronous transfers, slave
+  models: echo, zero, ones, register file, or a C callback), I2c (register file slaves), Uart (captured
+  and echoed to the log), file backed Fee and MemAcc (persist across runs in `--nv=<dir>`), Lin master
+  channels (slave responses from a table), Mcu/Platform/OsIf/Pit_Ip/Mcl stubs with `Mcu_PerformReset`
+  re-executing the process. Tables come from the project's MCAL ECUC files through
+  `tools/gen_periph_cfg.py` (verified on the Cabin ECU: 84 Dio channels, 7 ADC groups, 39 SPI sequences,
+  117 Fee blocks, ...). Notifications run in ISR context through an OS internal soft ISR per core.
+- `sil/periph/SilIo.c` **virtual I/O registry**: every pin, analog input, PWM output and capture input is
+  an entry test scripts set and read through the control server (`io_set`, `io_get`, `io_list`) by key
+  (`dio.5`, `adc.1`, `icu.0.freq`) or generated symbolic name (`DioConf_DioChannel_BUTTON`); `--io=` sets
+  initial values. Peripheral traffic (SPI, I2C, UART, LIN) is captured for assertions (`periph_recv`).
 - `demo/` two core stand-in ECU with two CAN controllers wired back to back and a CanIf stand-in,
+  every virtual peripheral in use (button to LED, ADC to PWM, ICU speed, GPT timeout, SPI sensor,
+  I2C temperature, UART status line, LIN schedule, Fee odometer, MemAcc boot counter),
   `tests/unit/test_os.c` 103 OSEK semantics checks, `tests/sil` pytest (control server, time stepping
   determinism, CAN over the in-process link and over UDP), CI on Linux (gcc, clang+ASan, TSan) and
   Windows (MinGW, MSVC).
@@ -91,6 +107,8 @@ with SilProcess("build/windows-mingw-br1tools/demo/demo_ecu.exe", paused=True) a
     print(c.stats()["tasks"])
 ```
 
+`demo_ecu --io=adc.1=100 --io=icu.0.freq=500 --nv=build` starts with a temperature of 100 counts and a
+500 Hz speed signal and keeps the Fee/MemAcc images in `build/`; the UART status line shows the result.
 `demo_ecu --can0=udp --time=realtime` puts controller 0 on the UDP bus (239.0.0.1:52000), where
 python-can (`interface="silcan"`) or any other process using the same datagram format sees it.
 
@@ -105,10 +123,11 @@ sil/runtime   command line runtime (SilRt_Main, --control, --paused, --can<N>=)
 sil/ctrl      control server (newline JSON over TCP)
 sil/bus       CAN bus backends: null, loop (in-process), UDP multicast
 sil/mcal/inc  virtual MCAL API headers (AUTOSAR + NXP RTD names): Can_43_FLEXCAN, Spi, Adc, Dio, Port, Gpt, Icu, Pwm, Mcu, ...
-sil/mcal/src  virtual CAN driver (Can_43_FLEXCAN API)
-tools/        ecuc.py, gen_os_cfg.py, gen_can_cfg.py, gen_mcal_cfg.py, check_sip.py, probe_sip_compile.py, siltrace.py, ecuc_build.py
+sil/mcal/src  virtual MCAL: Can_43_FLEXCAN, Dio/Port, Adc, Pwm, Icu, Gpt, Spi, CDD_I2c/CDD_Uart, Fee, MemAcc, Lin, Mcu & co.
+sil/periph    virtual I/O registry (SilIo)
+tools/        ecuc.py, gen_os_cfg.py, gen_can_cfg.py, gen_periph_cfg.py, gen_mcal_cfg.py, check_sip.py, probe_sip_compile.py, siltrace.py, ecuc_build.py
 python/       microsarsil package (SilProcess, SilControl, UDP bus, python-can interface, pytest fixtures)
-demo/         DemoEcu.arxml + DemoEcu_Can.arxml (built by make_demo_ecuc.py) and the demo application
+demo/         DemoEcu.arxml + DemoEcu_Can.arxml + DemoEcu_Mcal.arxml (built by make_demo_ecuc.py) and the demo application
 tests/        unit/test_os.c (OS semantics), tools/ (pytest for the generators), sil/ (pytest against the demo ECU)
 docs/         reference project inventory, architecture, integration guide
 ```

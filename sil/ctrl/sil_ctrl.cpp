@@ -12,6 +12,8 @@
 #include "sil_ctrl.h"
 #include "sil_ctrl_internal.h"
 #include "SilCan.h"
+#include "SilIo.h"
+#include "SilMcal.h"
 #include "SilOs.h"
 #include "sil_port.h"
 #include "sil_runtime.h"
@@ -462,9 +464,108 @@ std::string handle(const JVal &req) {
         SilRt_WriteTraces();
         return ok();
     }
+    if (cmd == "io_set" || cmd == "io_get") {
+        std::string key = req.getStr("key", "");
+        SilIo_Kind kind;
+        uint32 id;
+        uint8 field;
+        if (SilIo_Parse(key.c_str(), &kind, &id, &field) != 0) return err("unknown I/O key " + key);
+        if (cmd == "io_set") {
+            const JVal *v = req.get("value");
+            if (v == nullptr || v->t != JVal::Num) return err("value: number expected");
+            SilIo_Set(kind, id, field, v->num);
+        }
+        char buf[64];
+        std::snprintf(buf, sizeof buf, "%.17g", SilIo_Get(kind, id, field));
+        const char *sym = SilIo_Symbol(kind, id);
+        return ok("\"key\":" + jesc(std::string(SilIo_KindName(kind)) + "." + std::to_string(id) + "." + SilIo_FieldName(field)) +
+                  ",\"symbol\":" + (sym ? jesc(sym) : std::string("null")) + ",\"value\":" + buf);
+    }
+    if (cmd == "io_list") {
+        struct Ctx {
+            std::string o;
+            bool first = true;
+        } ctx;
+        SilIo_Visit(
+            [](void *user, SilIo_Kind kind, uint32 id, uint8 field, double value) {
+                Ctx *c = static_cast<Ctx *>(user);
+                char buf[64];
+                std::snprintf(buf, sizeof buf, "%.17g", value);
+                const char *sym = SilIo_Symbol(kind, id);
+                if (!c->first) c->o += ",";
+                c->first = false;
+                c->o += "{\"key\":" + jesc(std::string(SilIo_KindName(kind)) + "." + std::to_string(id) + "." + SilIo_FieldName(field)) +
+                        ",\"symbol\":" + (sym ? jesc(sym) : std::string("null")) + ",\"value\":" + buf + "}";
+            },
+            &ctx);
+        return ok("\"entries\":[" + ctx.o + "]");
+    }
+    if (cmd == "periph_recv") {
+        static SilMcal_Event evs[256];
+        uint64_t dropped = 0;
+        uint32 max = static_cast<uint32>(req.getU64("max", 256));
+        if (max > 256u) max = 256u;
+        uint32 n = SilMcal_TakeEvents(evs, max, &dropped);
+        static const char *kinds[] = {"spi", "i2c", "uart", "lin"};
+        std::string o = "\"events\":[";
+        for (uint32 i = 0; i < n; ++i) {
+            const SilMcal_Event &e = evs[i];
+            if (i) o += ",";
+            o += "{\"t_ns\":" + u64s(e.t_ns) + ",\"kind\":\"" + (e.kind < 4u ? kinds[e.kind] : "?") + "\",\"channel\":" + std::to_string(e.channel) +
+                 ",\"dir\":" + std::to_string(e.dir) + ",\"id\":" + std::to_string(e.id) + ",\"tx\":\"" + hexstr(e.tx, e.len) + "\",\"rx\":\"" +
+                 hexstr(e.rx, e.len) + "\"}";
+        }
+        o += "],\"dropped\":" + u64s(dropped);
+        return ok(o);
+    }
+    if (cmd == "reg_write" || cmd == "reg_read") {
+        uint8 bus = static_cast<uint8>(req.getU64("bus", 1)); /* 0 spi device, 1 i2c address */
+        uint16 dev = static_cast<uint16>(req.getU64("device", req.getU64("address", 0)));
+        uint8 reg = static_cast<uint8>(req.getU64("reg", 0));
+        if (cmd == "reg_write") {
+            std::vector<uint8_t> data;
+            const JVal *d = req.get("data");
+            if (d == nullptr || d->t != JVal::Str || !unhex(d->s, data)) return err("data: hex string expected");
+            if (!data.empty()) SilMcal_RegWrite(bus, dev, reg, data.data(), static_cast<uint32>(data.size()));
+            return ok();
+        }
+        uint32 len = static_cast<uint32>(req.getU64("len", 1));
+        if (len > 256u) len = 256u;
+        uint8 buf[256];
+        SilMcal_RegRead(bus, dev, reg, buf, len);
+        return ok("\"data\":\"" + hexstr(buf, len) + "\"");
+    }
+    if (cmd == "uart_send") {
+        std::vector<uint8_t> data;
+        const JVal *d = req.get("data");
+        std::string text = req.getStr("text", "");
+        if (d != nullptr && d->t == JVal::Str && !unhex(d->s, data)) return err("data: hex string expected");
+        if (!text.empty()) data.insert(data.end(), text.begin(), text.end());
+        if (!data.empty()) SilUart_FeedRx(static_cast<uint8>(req.getU64("channel", 0)), data.data(), static_cast<uint32>(data.size()));
+        return ok();
+    }
+    if (cmd == "uart_recv") {
+        uint8 buf[4096];
+        uint32 n = SilUart_TakeTx(static_cast<uint8>(req.getU64("channel", 0)), buf, sizeof buf);
+        return ok("\"data\":\"" + hexstr(buf, n) + "\"");
+    }
+    if (cmd == "lin_response") {
+        std::vector<uint8_t> data;
+        const JVal *d = req.get("data");
+        if (d != nullptr && d->t == JVal::Str && !unhex(d->s, data)) return err("data: hex string expected");
+        if (data.size() > 8u) return err("data: at most 8 bytes");
+        SilLin_SetResponse(static_cast<uint8>(req.getU64("channel", 0)), static_cast<uint8>(req.getU64("pid", 0)), data.data(),
+                           static_cast<uint8>(data.size()));
+        return ok();
+    }
+    if (cmd == "spi_model") {
+        if (SilSpi_SetSlaveModel(static_cast<uint8>(req.getU64("device", 0)), req.getStr("model", "echo").c_str()) != 0) return err("unknown model");
+        return ok();
+    }
     if (cmd == "help")
         return ok("\"commands\":[\"ping\",\"time\",\"run_until\",\"step\",\"pause\",\"resume\",\"stop\",\"stats\",\"can_send\",\"can_recv\","
-                  "\"can_busoff\",\"can_bus\",\"irq\",\"user\",\"write_traces\",\"sync\"]");
+                  "\"can_busoff\",\"can_bus\",\"irq\",\"user\",\"write_traces\",\"sync\",\"io_set\",\"io_get\",\"io_list\","
+                  "\"periph_recv\",\"reg_write\",\"reg_read\",\"uart_send\",\"uart_recv\",\"lin_response\",\"spi_model\"]");
     return err("unknown command " + cmd);
 }
 

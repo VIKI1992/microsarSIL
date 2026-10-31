@@ -582,3 +582,17 @@ void CanIf_RxIndication(const Can_HwType *Mailbox, const PduInfoType *PduInfoPtr
 void CanIf_TxConfirmation(PduIdType CanTxPduId) { (void)CanTxPduId; }
 void CanIf_ControllerBusOff(uint8 ControllerId) { (void)ControllerId; }
 void CanIf_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode) { (void)ControllerId; (void)ControllerMode; }
+
+/* notification functions named in the demo MCAL configuration (the generated tables reference them) */
+void Demo_AdcSenseNotification(void);
+void Demo_HallEdgeNotification(void);
+void Demo_GptTimeoutNotification(void);
+void Demo_SpiSensorEndNotification(void);
+void Demo_NvJobEndNotification(void);
+void Demo_NvJobErrorNotification(void);
+void Demo_AdcSenseNotification(void) {}
+void Demo_HallEdgeNotification(void) {}
+void Demo_GptTimeoutNotification(void) {}
+void Demo_SpiSensorEndNotification(void) {}
+void Demo_NvJobEndNotification(void) {}
+void Demo_NvJobErrorNotification(void) {}

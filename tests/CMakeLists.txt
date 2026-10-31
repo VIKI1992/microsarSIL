@@ -1,6 +1,6 @@
 # OS semantics tests run as an ECU built on the demo configuration with test task bodies.
 silos_add_ecu(test_os
-  ARXML ${SIL_ROOT}/demo/ecuc/DemoEcu.arxml ${SIL_ROOT}/demo/ecuc/DemoEcu_Can.arxml
+  ARXML ${SIL_ROOT}/demo/ecuc/DemoEcu.arxml ${SIL_ROOT}/demo/ecuc/DemoEcu_Can.arxml ${SIL_ROOT}/demo/ecuc/DemoEcu_Mcal.arxml
   SOURCES unit/test_os.c)
 add_test(NAME os_semantics COMMAND test_os --quiet)
 set_tests_properties(os_semantics PROPERTIES TIMEOUT 120)

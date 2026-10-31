@@ -57,8 +57,12 @@ target_link_libraries(silos PUBLIC siltrace silport)
 sil_strict_warnings(silos)
 
 # ---- virtual MCAL: API headers, virtual CAN driver and bus backends (SPI & co. with M4) --------
-add_library(silmcal STATIC sil/mcal/src/Can_43_FLEXCAN.c sil/bus/sil_bus.cpp)
-target_include_directories(silmcal PUBLIC sil/mcal/inc sil/bus)
+add_library(silmcal STATIC
+  sil/mcal/src/Can_43_FLEXCAN.c sil/bus/sil_bus.cpp sil/periph/SilIo.c sil/mcal/src/SilMcal_Common.c
+  sil/mcal/src/SilMcal_Stubs.c sil/mcal/src/Dio.c sil/mcal/src/Pwm.c sil/mcal/src/Gpt.c sil/mcal/src/Adc.c
+  sil/mcal/src/Icu.c sil/mcal/src/Spi.c sil/mcal/src/CDD_Serial.c sil/mcal/src/Fee.c sil/mcal/src/MemAcc.c
+  sil/mcal/src/Lin.c)
+target_include_directories(silmcal PUBLIC sil/mcal/inc sil/bus sil/periph)
 target_link_libraries(silmcal PUBLIC silos)
 if(WIN32)
   target_link_libraries(silmcal PUBLIC ws2_32)

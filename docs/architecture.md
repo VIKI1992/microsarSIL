@@ -83,8 +83,27 @@ at the FD rate); its callback queues the confirmation and raises the TX ISR. Dri
 never held while an ISR is raised, because the ISR takes the same mutex. ISRs are found by the
 handler name in `OsIsrSpecialFunctionName` (`SilOs_IsrByHandler`), so the OS tables of a MICROSAR
 project match without renaming. `tools/gen_can_cfg.py` emits `SilCan_Cfg.c` (controllers, hardware
-objects, filters, handler functions) from the `Can` ECUC; `silos_add_ecu()` runs it together with
+objects, filters, handler functions) from the `Can` ECUC and `tools/gen_periph_cfg.py` emits
+`SilMcal_Cfg.c` (Dio, Adc, Pwm, Icu, Gpt, Spi, Fee, MemAcc, I2c, Uart, Lin tables, handler functions,
+LIN ISR bodies, notification externs, the I/O name table); `silos_add_ecu()` runs them together with
 `gen_os_cfg.py` and `gen_mcal_cfg.py`.
+
+## Virtual MCAL and the I/O registry
+
+`sil/periph/SilIo.c` holds every pin, analog input, PWM output and capture input as a (kind, id) entry
+with numeric fields (value, period, freq, duty, tickhz, idle). The drivers in `sil/mcal/src` read and
+write it; the control server and `--io=` set it; subscribers (the ICU) are told about changes.
+Drivers never block: asynchronous work (an ADC conversion, an SPI transfer, a GPT expiry, a LIN
+frame, an I2C/UART transfer) is a virtual timer whose callback completes the job and either raises
+the OS ISR named in the configuration (`Spi_Ip_SPI_<n>_IRQHandler`, `LinIsr_<n>`, ...) or queues the
+notification for the OS internal soft ISR of the master core (`SilOs_RunInIsr`, ISR kind 3, lowest
+urgency, added by `gen_os_cfg.py` per core). Virtual timer callbacks run on whatever thread advances
+the clock (an idle loop, a task consuming execution time, the control thread), so they never call the
+OS API directly; `SilOs_InOsContext()` tells a model whether a direct call is allowed. Synchronous
+APIs (`Spi_SyncTransmit`, `I2c_SyncTransmit`, `Uart_SyncSend`) consume the bus time on the calling
+task with `SilOs_ConsumeTime` and call their notifications in the caller's context, as the hardware
+drivers do. Fee and MemAcc keep their data in image files under `--nv=<dir>`, so NvM content survives
+a run and the `Mcu_PerformReset` re-execution.
 
 ## Control server
 

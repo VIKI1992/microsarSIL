@@ -49,7 +49,7 @@ typedef struct {
     uint8 category;           /* 1 or 2 */
     uint8 nesting;            /* OsIsrEnableNesting */
     uint8 initialEnabled;     /* OsIsrInitialEnableInterruptSource */
-    uint8 kind;               /* 0 user, 1 system timer, 2 xsignal */
+    uint8 kind;               /* 0 user, 1 system timer, 2 xsignal, 3 SIL soft ISR (peripheral callbacks) */
     uint32 source;            /* OsIsrInterruptSource (informational) */
     const char *handler;      /* OsIsrSpecialFunctionName (driver handler) or NULL_PTR */
 } SilOs_IsrCfg;

@@ -19,6 +19,10 @@
  *   --paused                  start with the virtual time frozen at 0 (step it from the control server)
  *   --can<N>=<spec>           bus backend of CAN controller N: null | loop:<name> | udp[:<group>:<port>]
  *   --can=<spec>              bus backend of all CAN controllers
+ *   --nv=<dir>                directory of the Fee/MemAcc image files (default: current directory)
+ *   --io=<key>=<value>        initial value of a virtual I/O entry (dio.17=1, adc.3=2048, icu.2.freq=100,
+ *                             DioConf_DioChannel_X=1); repeatable
+ *   --resume                  the process was re-executed by Mcu_PerformReset (reset reason SW_RESET)
  */
 #ifndef SIL_RUNTIME_H
 #define SIL_RUNTIME_H
@@ -42,6 +46,10 @@ typedef struct {
     int paused;
     const char *canAllSpec;    /* --can= */
     const char *canSpec[16];   /* --can<N>= */
+    const char *nvDir;         /* --nv= */
+    const char *ioInit[32];    /* --io= key=value */
+    unsigned numIoInit;
+    int resumed;               /* --resume */
     int argc;
     char **argv;
 } SilRt_Options;

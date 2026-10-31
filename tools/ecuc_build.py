@@ -82,15 +82,7 @@ class EcucModule:
             out.append(f'{indent}  </SUB-CONTAINERS>')
         out.append(f'{indent}</ECUC-CONTAINER-VALUE>')
 
-    def to_xml(self) -> str:
-        out: List[str] = []
-        out.append('<?xml version="1.0" encoding="UTF-8" standalone="no"?>')
-        out.append('<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
-                   'xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00049.xsd">')
-        out.append('  <AR-PACKAGES>')
-        out.append('    <AR-PACKAGE>')
-        out.append(f'      <SHORT-NAME>{self.package}</SHORT-NAME>')
-        out.append('      <ELEMENTS>')
+    def emit_module(self, out: List[str]) -> None:
         out.append('        <ECUC-MODULE-CONFIGURATION-VALUES>')
         out.append(f'          <SHORT-NAME>{self.module}</SHORT-NAME>')
         out.append(f'          <DEFINITION-REF DEST="ECUC-MODULE-DEF">{self.defroot}</DEFINITION-REF>')
@@ -99,11 +91,32 @@ class EcucModule:
             self._emit_container(c, f"{self.defroot}/{c.defn}", out, "            ")
         out.append('          </CONTAINERS>')
         out.append('        </ECUC-MODULE-CONFIGURATION-VALUES>')
-        out.append('      </ELEMENTS>')
-        out.append('    </AR-PACKAGE>')
-        out.append('  </AR-PACKAGES>')
-        out.append('</AUTOSAR>')
-        return "\n".join(out) + "\n"
+
+    def to_xml(self) -> str:
+        return modules_xml([self])
 
     def write(self, path: Union[str, Path]) -> None:
         Path(path).write_text(self.to_xml(), encoding="utf-8", newline="\n")
+
+
+def modules_xml(modules: Sequence["EcucModule"]) -> str:
+    """One arxml with several modules in the package of the first one."""
+    out: List[str] = []
+    out.append('<?xml version="1.0" encoding="UTF-8" standalone="no"?>')
+    out.append('<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+               'xsi:schemaLocation="http://autosar.org/schema/r4.0 AUTOSAR_00049.xsd">')
+    out.append('  <AR-PACKAGES>')
+    out.append('    <AR-PACKAGE>')
+    out.append(f'      <SHORT-NAME>{modules[0].package}</SHORT-NAME>')
+    out.append('      <ELEMENTS>')
+    for m in modules:
+        m.emit_module(out)
+    out.append('      </ELEMENTS>')
+    out.append('    </AR-PACKAGE>')
+    out.append('  </AR-PACKAGES>')
+    out.append('</AUTOSAR>')
+    return "\n".join(out) + "\n"
+
+
+def write_modules(path: Union[str, Path], modules: Sequence["EcucModule"]) -> None:
+    Path(path).write_text(modules_xml(modules), encoding="utf-8", newline="\n")

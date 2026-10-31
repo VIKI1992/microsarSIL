@@ -25,6 +25,7 @@ extern "C" {
 
 #define SILOS_MAX_NEST 16u
 #define SILOS_MAX_VTIMERS 256u
+#define SILOS_SOFT_QUEUE 256u
 #define SILOS_PRIO_MAX 0xFFFFFFF0u
 #define SILOS_STATE_BUSY 0u
 #define SILOS_STATE_IDLE 1u
@@ -161,6 +162,9 @@ typedef struct SilOs_Core {
     SilOs_XsigReq *xsigTail;
     uint32 xsigIsr;
     uint32 timerIsr;
+    uint32 softIsr;          /* SILOS_INVALID_ID if none */
+    struct { SilOs_TimerFn fn; void *arg; } softQueue[SILOS_SOFT_QUEUE];
+    uint32 softHead, softCount;
     uint64 seqCounter;
     AppModeType appMode;
     sil_thread_t *thread;
@@ -238,6 +242,7 @@ void silos_autostart_time_locked(SilOs_Core *core);
 
 /* ---- misc --------------------------------------------------------------- */
 void silos_xsignal_isr_body(void);
+void silos_softisr_body(void);
 void silos_xsig_process_locked(SilOs_Core *core);
 
 #ifdef __cplusplus

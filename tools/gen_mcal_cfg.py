@@ -65,6 +65,9 @@ MODULE_FILES = {
 }
 
 
+S32E2_DIO_PORTS = {0: 0, 1: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 9: 7, 10: 8, 11: 9, 12: 10}
+
+
 def cident(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", s)
 
@@ -86,6 +89,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             continue
         lines: List[str] = []
         auto: List[str] = []
+        nxp_dio = mname == "Dio" and ("TS_T31" in mod.defpath or "TS_T40" in mod.defpath)
         for c in mod.all():
             spec = ID_PARAMS.get(c.defn)
             if spec is not None:
@@ -97,6 +101,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     val = int(v, 0)
                 except ValueError:
                     continue
+                if c.defn == "DioChannel" and c.parent is not None:
+                    # NXP S32E/Z RTD: Dio_ChannelType = hardware port index * 16 + pin (ports A B D E F G H J K L M)
+                    pid = c.parent.getint("DioPortId", 0)
+                    val = (S32E2_DIO_PORTS.get(pid, pid) if nxp_dio else pid) * 16 + val
                 macro = f"{mname}Conf_{c.defn}_{cident(c.name)}"
                 lines.append(f"#define {macro} (({ctype}){val}U)" if ctype else f"#define {macro} ({val}U)")
             else:

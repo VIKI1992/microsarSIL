@@ -84,6 +84,7 @@ class Model:
         self.isrKind: Dict[str, int] = {}
         self.isrWrappers: List[Tuple[str, str]] = []
         self.isrBodies: Set[str] = set(args.isr_bodies)
+        self.coreOverride: Dict[str, int] = {}
         self.build()
 
     # ------------------------------------------------------------------
@@ -123,7 +124,7 @@ class Model:
                     self.objApp[name] = a.name
         # objects in file order
         self.tasks = os_.top("OsTask")
-        self.isrs = os_.top("OsIsr")
+        self.isrs = list(os_.top("OsIsr")) + [self.soft_isr(c) for c in range(self.numCores)]
         self.counters = os_.top("OsCounter")
         self.alarms = os_.top("OsAlarm")
         self.resources = os_.top("OsResource")
@@ -150,13 +151,28 @@ class Model:
         t = trailing_int(name, -1)
         return t if t >= 0 else default
 
+    def soft_isr(self, core: int) -> Container:
+        """OS internal Cat2 ISR per core in which the SIL runs peripheral model callbacks (lowest urgency)."""
+        c = Container(name=f"SilOs_SoftIsr_OsCore{core}", defpath="/MICROSAR/Os/OsIsr", path=f"/SilOs/SilOs_SoftIsr_OsCore{core}")
+        c.params = {"OsIsrCategory": ["CATEGORY_2"], "OsIsrInterruptPriority": ["255"], "OsIsrEnableNesting": ["false"],
+                    "OsIsrInitialEnableInterruptSource": ["true"], "OsIsrStackSize": ["1024"]}
+        self.coreOverride[c.name] = core
+        return c
+
     def obj_core(self, name: str, default: int = 0) -> int:
+        if name in self.coreOverride:
+            return self.coreOverride[name]
         app = self.objApp.get(name)
         if app is not None:
             return self.appCore.get(app, default)
         return default
 
     def obj_app(self, name: str) -> str:
+        if name in self.coreOverride:
+            for a in self.apps:
+                if self.appCore.get(a.name) == self.coreOverride[name]:
+                    return str(self.appIdx[a.name])
+            return "0xFFFFu"
         app = self.objApp.get(name)
         return str(self.appIdx[app]) if app in self.appIdx else "0xFFFFu"
 
@@ -213,7 +229,9 @@ class Model:
             if not useSpecial:
                 special = ""
             kind = 0
-            if isr.name in timerIsrs or special.startswith("Os_Timer"):
+            if isr.name in self.coreOverride:
+                kind = 3
+            elif isr.name in timerIsrs or special.startswith("Os_Timer"):
                 kind = 1
             elif special.startswith("Os_XSig") or isr.name.startswith("XSignalIsr"):
                 kind = 2
@@ -228,6 +246,8 @@ class Model:
                 self.isrEntry[isr.name] = f"Os_Isr_{cident(isr.name)}"
 
     def isr_urgency(self, isr: Container) -> int:
+        if isr.name in self.coreOverride:
+            return 1  # below every configured ISR
         p = isr.getint("OsIsrInterruptPriority", 0)
         if self.args.isr_prio_order == "lower-is-higher":
             return 0xFFFF - p if p <= 0xFFFF else 0
