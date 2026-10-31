@@ -36,7 +36,7 @@ def test_demo_generate(tmp_path):
     # events of one task get distinct bits; events of different tasks may share
     masks = {line.split()[1]: line.split()[2] for line in cfg.splitlines() if line.startswith("#define Ev_")}
     assert masks["Ev_1ms"] != masks["Ev_CanRx"] != masks["Ev_SpiDone"]
-    assert '"IdleTask_OsCore1", NULL, 0u, 1u' in lcfg  # idle task: no entry, core 1
+    assert '"IdleTask_OsCore1", NULL_PTR, 0u, 1u' in lcfg  # idle task: no entry, core 1
     assert "SILOS_SCHED_NON" in lcfg and "SILOS_LOCK_CAT2_INTERRUPTS" in lcfg
     assert "IocWrite_Ioc_Speed_0" in (tmp_path / "Os_Ioc_Lcfg.h").read_text()
     assert "IocSend_Ioc_Samples_0" in (tmp_path / "Os_Ioc_Lcfg.c").read_text()

@@ -8,6 +8,7 @@
 #ifndef PLATFORM_TYPES_H
 #define PLATFORM_TYPES_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #define PLATFORM_VENDOR_ID (0xFFFFu)

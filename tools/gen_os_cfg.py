@@ -219,7 +219,7 @@ class Model:
                 kind = 2
             self.isrKind[isr.name] = kind
             if kind != 0:
-                self.isrEntry[isr.name] = "NULL"
+                self.isrEntry[isr.name] = "NULL_PTR"
             elif special:
                 self.isrEntry[isr.name] = f"Os_Isr_{cident(special)}"
                 if special not in self.isrBodies and not self.args.no_isr_wrappers:
@@ -399,7 +399,7 @@ def emit_lcfg_h(m: Model, src: str) -> str:
     seen: Set[str] = set()
     for isr in m.isrs:
         e = m.isrEntry[isr.name]
-        if e != "NULL" and e not in seen:
+        if e != "NULL_PTR" and e not in seen:
             seen.add(e)
             o.append(f"extern void {e}(void);")
     o.append("")
@@ -451,12 +451,12 @@ def emit_lcfg_c(m: Model, src: str) -> str:
         owned = 0
         for e in t.ref("OsTaskEventRef"):
             owned |= m.eventMask.get(e, 0)
-        entry = "NULL" if idle else f"Os_Task_{cident(t.name)}"
+        entry = "NULL_PTR" if idle else f"Os_Task_{cident(t.name)}"
         app = m.obj_app(t.name)
         core = m.obj_core(t.name, 0)
         o.append(f'  {{ "{t.name}", {entry}, {prio}u, {core}u, {app}, {sched}, {ext}u, {1 if idle else 0}u, {act}u, {modes}, {ires}, {stack}u, {owned}uLL }},')
     if not m.tasks:
-        o.append('  { "none", NULL, 0u, 0u, 0xFFFFu, SILOS_SCHED_FULL, 0u, 1u, 1u, 0u, SILOS_INVALID_ID, 0u, 0uLL },')
+        o.append('  { "none", NULL_PTR, 0u, 0u, 0xFFFFu, SILOS_SCHED_FULL, 0u, 1u, 1u, 0u, SILOS_INVALID_ID, 0u, 0uLL },')
     o.append("};")
     o.append("")
     # isrs
@@ -471,7 +471,7 @@ def emit_lcfg_c(m: Model, src: str) -> str:
         src_ = isr.getint("OsIsrInterruptSource", 0)
         o.append(f'  {{ "{isr.name}", {m.isrEntry[isr.name]}, {m.obj_core(isr.name, 0)}u, {m.obj_app(isr.name)}, {m.isr_urgency(isr)}u, {cat}u, {nesting}u, {ien}u, {kind}u, {src_}u }},')
     if not m.isrs:
-        o.append('  { "none", NULL, 0u, 0xFFFFu, 0u, 2u, 0u, 0u, 0u, 0u },')
+        o.append('  { "none", NULL_PTR, 0u, 0xFFFFu, 0u, 2u, 0u, 0u, 0u, 0u },')
     o.append("};")
     o.append("")
     # counters
@@ -500,7 +500,7 @@ def emit_lcfg_c(m: Model, src: str) -> str:
         task = INVALID
         mask = "0uLL"
         inc = INVALID
-        cb = "NULL"
+        cb = "NULL_PTR"
         if action is not None:
             at = action.sub1("OsAlarmActivateTask")
             se = action.sub1("OsAlarmSetEvent")
@@ -530,7 +530,7 @@ def emit_lcfg_c(m: Model, src: str) -> str:
             cycle = auto.getint("OsAlarmCycleTime", 0)
         o.append(f'  {{ "{a.name}", {cidx}u, {act}, {akind}, {m.obj_app(a.name)}, {amodes}, {task}, {mask}, {inc}, {cb}, {start}u, {cycle}u }},')
     if not m.alarms:
-        o.append('  { "none", 0u, SILOS_ALARM_ACTIVATETASK, SILOS_AUTOSTART_NONE, 0xFFFFu, 0u, SILOS_INVALID_ID, 0uLL, SILOS_INVALID_ID, NULL, 0u, 0u },')
+        o.append('  { "none", 0u, SILOS_ALARM_ACTIVATETASK, SILOS_AUTOSTART_NONE, 0xFFFFu, 0u, SILOS_INVALID_ID, 0uLL, SILOS_INVALID_ID, NULL_PTR, 0u, 0u },')
     o.append("};")
     o.append("")
     # resources
@@ -594,7 +594,7 @@ def emit_lcfg_c(m: Model, src: str) -> str:
             ne = len(p.sub("OsScheduleTableEventSetting"))
             o.append(f"  {{ {p.getint('OsScheduleTblExpPointOffset', 0)}u, {nt}u, st_{n}_ep{i}_tasks, {ne}u, st_{n}_ep{i}_etasks, st_{n}_ep{i}_emasks }},")
         if not points:
-            o.append("  { 0u, 0u, NULL, 0u, NULL, NULL },")
+            o.append("  { 0u, 0u, NULL_PTR, 0u, NULL_PTR, NULL_PTR },")
         o.append("};")
     o.append("static const SilOs_SchedTblCfg osSchedTbls[] = {")
     for s in m.schedtbls:
@@ -613,7 +613,7 @@ def emit_lcfg_c(m: Model, src: str) -> str:
         o.append(f'  {{ "{s.name}", {cnt}u, {s.getint("OsScheduleTableDuration", 1)}u, {1 if s.getbool("OsScheduleTableRepeating") else 0}u, '
                  f'{akind}, {m.obj_app(s.name)}, {aoff}u, {amodes}, {npts}u, st_{n}_points }},')
     if not m.schedtbls:
-        o.append('  { "none", 0u, 1u, 0u, SILOS_AUTOSTART_NONE, 0xFFFFu, 0u, 0u, 0u, NULL },')
+        o.append('  { "none", 0u, 1u, 0u, SILOS_AUTOSTART_NONE, 0xFFFFu, 0u, 0u, 0u, NULL_PTR },')
     o.append("};")
     o.append("")
     # hooks
@@ -621,7 +621,7 @@ def emit_lcfg_c(m: Model, src: str) -> str:
     hooks = osos.sub1("OsHooks") if osos is not None else None
 
     def hk(name: str, fn: str) -> str:
-        return fn if (hooks is not None and hooks.getbool(name)) else "NULL"
+        return fn if (hooks is not None and hooks.getbool(name)) else "NULL_PTR"
 
     o.append("const SilOs_Config SilOs_Cfg = {")
     o.append(f"  {m.numCores}u, {m.masterCore}u, {1 if (osos is None or (osos.get('OsStatus', 'EXTENDED') or '').upper() == 'EXTENDED') else 0}u, {len(m.appModes)}u, osAppModeNames,")
@@ -635,7 +635,7 @@ def emit_lcfg_c(m: Model, src: str) -> str:
     o.append(f"  {max(1, len(m.apps)) if m.apps else 0}u, osApps,")
     o.append(f"  {len(m.schedtbls)}u, osSchedTbls,")
     o.append(f"  {{ {hk('OsStartupHook', 'StartupHook')}, {hk('OsShutdownHook', 'ShutdownHook')}, {hk('OsErrorHook', 'ErrorHook')}, "
-             f"{hk('OsPreTaskHook', 'PreTaskHook')}, {hk('OsPostTaskHook', 'PostTaskHook')}, {hk('OsProtectionHook', 'ProtectionHook')}, NULL }}")
+             f"{hk('OsPreTaskHook', 'PreTaskHook')}, {hk('OsPostTaskHook', 'PostTaskHook')}, {hk('OsProtectionHook', 'ProtectionHook')}, NULL_PTR }}")
     o.append("};")
     return "\n".join(o) + "\n"
 
@@ -712,7 +712,7 @@ def emit_ioc_c(m: Model, src: str) -> str:
         if m.args.ioc_init_values and init:
             o.append(f"void Os_IocInit_{n}(void) {{ {t} v = {init}; SilOs_IocInit(&ioc_{n}, &v); }}")
         else:
-            o.append(f"void Os_IocInit_{n}(void) {{ SilOs_IocInit(&ioc_{n}, NULL); }}")
+            o.append(f"void Os_IocInit_{n}(void) {{ SilOs_IocInit(&ioc_{n}, NULL_PTR); }}")
         o.append("")
     return "\n".join(o) + "\n"
 
