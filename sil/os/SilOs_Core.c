@@ -1023,6 +1023,23 @@ void SilOs_SetTimeLimit(uint64 limitNs) {
 
 uint64 SilOs_GetTimeLimit(void) { return sil_atomic_load64(&silos_g.timeLimitNs); }
 
+int SilOs_WaitStarted(uint64 hostTimeoutNs) {
+    uint64 deadline = sil_clock_ns() + hostTimeoutNs;
+    int ok = 0;
+    silos_lock();
+    for (;;) {
+        if (silos_g.shutdown) break;
+        if (silos_g.cores[silos_g.cfg->masterCore].osStarted) {
+            ok = 1;
+            break;
+        }
+        if (sil_clock_ns() >= deadline) break;
+        sil_cond_wait_for(silos_g.progress, silos_g.lock, 2000000u);
+    }
+    silos_unlock();
+    return ok;
+}
+
 int SilOs_WaitQuiescent(uint64 atNs, uint64 hostTimeoutNs) {
     uint64 deadline = sil_clock_ns() + hostTimeoutNs;
     int ok = 0;

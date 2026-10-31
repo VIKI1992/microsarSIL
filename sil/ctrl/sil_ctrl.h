@@ -19,6 +19,7 @@
  *   irq {isr}                         raise an OS ISR by handler or name
  *   user {id, aux}                    put a user event into the trace
  *   write_traces                      write the configured trace files now
+ *   sync {timeout_ms}                 wait until StartOS completed (and, when paused, until quiescent)
  */
 #ifndef SIL_CTRL_H
 #define SIL_CTRL_H

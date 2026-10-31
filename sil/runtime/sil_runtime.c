@@ -158,6 +158,9 @@ int SilRt_Run(const SilRt_Options *opt, SilOs_CoreEntryFn entry) {
     }
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
+#if defined(SIGPIPE)
+    signal(SIGPIPE, SIG_IGN); /* a control client that went away must not kill the ECU */
+#endif
     SilOs_StartMaster();
     code = SilOs_WaitShutdown();
     SilRt_WriteTraces();

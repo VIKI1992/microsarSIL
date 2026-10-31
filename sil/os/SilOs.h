@@ -60,6 +60,8 @@ uint64 SilOs_GetTimeLimit(void);
 /* Block the calling host thread until the virtual clock reached `atNs` and no core can progress
  * (or the OS shut down). hostTimeoutNs bounds the wait. Returns 1 if quiescent at atNs, 0 on timeout. */
 int SilOs_WaitQuiescent(uint64 atNs, uint64 hostTimeoutNs);
+/* Block the calling host thread until the master core completed StartOS (or the OS shut down). */
+int SilOs_WaitStarted(uint64 hostTimeoutNs);
 
 /* Interrupt injection ----------------------------------------------------- */
 /* Thread safe, callable from any host thread, task, ISR or timer callback. */

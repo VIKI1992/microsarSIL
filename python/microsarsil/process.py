@@ -62,6 +62,7 @@ class SilProcess:
                 self.kill()
                 raise SilControlError("the ECU did not start its control server:\n" + "\n".join(self.log[-20:]))
             self.control = SilControl(self._host, self._port)
+            self.control.sync()  # start-up done (and, when paused, quiescent at t = 0)
 
     def _read(self) -> None:
         assert self.proc.stdout is not None

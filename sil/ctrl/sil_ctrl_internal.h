@@ -8,5 +8,7 @@
 std::string silctrl_handle_line(const std::string &line);
 /* Called once when the server starts (registers the CAN sniffer). */
 void silctrl_on_start();
+/* Called after a reply was sent (performs a requested stop). */
+void silctrl_after_reply();
 
 #endif

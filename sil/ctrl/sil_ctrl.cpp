@@ -307,6 +307,8 @@ void sniff(void *, uint8 ctrl, int isTx, const SilBus_Frame *f) {
 }
 
 // ---------------------------------------------------------------------------------------------
+std::atomic<int> g_pendingStop{-1};
+
 std::string ok(const std::string &fields = std::string()) { return fields.empty() ? "{\"ok\":true}" : "{\"ok\":true," + fields + "}"; }
 std::string err(const std::string &msg) { return "{\"ok\":false,\"error\":" + jesc(msg) + "}"; }
 
@@ -368,8 +370,18 @@ std::string handle(const JVal &req) {
         return ok(time_fields());
     }
     if (cmd == "stop") {
-        SilOs_RequestStop(static_cast<int>(req.getI64("code", 0)));
+        g_pendingStop.store(static_cast<int>(req.getI64("code", 0))); /* performed after the reply left */
         return ok();
+    }
+    if (cmd == "sync") {
+        /* start-up finished; when paused also everything that happens at the paused time */
+        uint64_t timeoutMs = req.getU64("timeout_ms", 60000);
+        if (!SilOs_WaitStarted(timeoutMs * 1000000ull)) return err("the OS did not start");
+        uint64_t limit = SilOs_GetTimeLimit();
+        uint64_t now = SilOs_ClockNow();
+        int q = 1;
+        if (SilOs_ClockMode() == SILOS_TIME_VIRTUAL && limit <= now) q = SilOs_WaitQuiescent(now, timeoutMs * 1000000ull);
+        return ok(time_fields() + ",\"quiescent\":" + (q ? "true" : "false"));
     }
     if (cmd == "stats") return ok(stats_json());
     if (cmd == "can_send") {
@@ -452,7 +464,7 @@ std::string handle(const JVal &req) {
     }
     if (cmd == "help")
         return ok("\"commands\":[\"ping\",\"time\",\"run_until\",\"step\",\"pause\",\"resume\",\"stop\",\"stats\",\"can_send\",\"can_recv\","
-                  "\"can_busoff\",\"can_bus\",\"irq\",\"user\",\"write_traces\"]");
+                  "\"can_busoff\",\"can_bus\",\"irq\",\"user\",\"write_traces\",\"sync\"]");
     return err("unknown command " + cmd);
 }
 
@@ -468,3 +480,8 @@ std::string silctrl_handle_line(const std::string &line) {
 }
 
 void silctrl_on_start() { SilCan_SetSniffer(sniff, nullptr); }
+
+void silctrl_after_reply() {
+    int code = g_pendingStop.exchange(-1);
+    if (code >= 0) SilOs_RequestStop(code);
+}

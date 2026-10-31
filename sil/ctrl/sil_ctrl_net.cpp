@@ -44,7 +44,11 @@ std::atomic<sil_socket_t> g_client{SIL_INVALID_SOCKET};
 bool send_all(sil_socket_t s, const std::string &data) {
     size_t off = 0;
     while (off < data.size()) {
+#if defined(MSG_NOSIGNAL)
+        int n = static_cast<int>(send(s, data.data() + off, data.size() - off, MSG_NOSIGNAL));
+#else
         int n = send(s, data.data() + off, static_cast<int>(data.size() - off), 0);
+#endif
         if (n <= 0) return false;
         off += static_cast<size_t>(n);
     }
@@ -66,6 +70,7 @@ void serve_client(sil_socket_t c) {
             std::string reply = silctrl_handle_line(line);
             reply += "\n";
             if (!send_all(c, reply)) return;
+            silctrl_after_reply();
         }
     }
 }

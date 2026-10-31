@@ -48,18 +48,19 @@ def test_udp_rx_and_reply_in_virtual_time(sil_exe, udp_spec):
 
 
 def test_udp_status_frames_in_realtime(sil_exe, udp_spec):
-    with SilUdpSocket(udp_spec) as bus, SilProcess(sil_exe, args=["--time=realtime:4", "--duration=1.5"], control=False,
-                                                     can={0: udp_spec}) as ecu:
-        ids = []
-        deadline = time.monotonic() + 10.0
-        while len(ids) < 5 and time.monotonic() < deadline:
+    # free running real time; the ECU is stopped through the control server once enough frames arrived
+    with SilUdpSocket(udp_spec) as bus, SilProcess(sil_exe, args=["--time=realtime"], can={0: udp_spec}) as ecu:
+        frames = []
+        deadline = time.monotonic() + 20.0
+        while len(frames) < 5 and time.monotonic() < deadline:
             f = bus.recv(1.0)
             if f is not None and f.id == 0x100:
-                ids.append(f)
-        assert len(ids) >= 5
-        counters = [int.from_bytes(f.data[0:4], "little") for f in ids]
-        assert counters == sorted(counters)
-        assert ecu.wait(30) == 0
+                frames.append(f)
+        assert len(frames) >= 5
+        counters = [int.from_bytes(f.data[0:4], "little") for f in frames]
+        assert counters == sorted(counters) and counters[-1] > counters[0]
+        assert ecu.control.time()["mode"] == "realtime"
+        assert ecu.stop() == 0
 
 
 def test_python_can_interface(sil_exe, udp_spec):

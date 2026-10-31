@@ -112,6 +112,10 @@ class SilControl:
             raise SilControlError(f"ECU not quiescent after a step of {_ns(dt)} ns within {timeout_ms} ms")
         return rep
 
+    def sync(self, timeout_ms: int = 60000) -> Dict[str, Any]:
+        """Wait until the OS started and, when paused, until everything at the paused time ran."""
+        return self.call("sync", timeout_ms=timeout_ms)
+
     def pause(self, timeout_ms: int = 60000) -> Dict[str, Any]:
         return self.call("pause", timeout_ms=timeout_ms)
 

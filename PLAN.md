@@ -154,7 +154,7 @@ microsarSIL/
 - `sil/bus`: `null`, `loop:<name>` (in-process), `udp[:<group>:<port>]` (multicast, own frames
   filtered by node id); selected per controller with `--can<N>=`/`--can=` or `SilCan_SetBus`.
 - `sil/ctrl`: `ping, time, run_until, step, pause, resume, stop, stats, can_send, can_recv,
-  can_busoff, can_bus, irq, user, write_traces`. `SilOs_SetTimeLimit` + `SilOs_WaitQuiescent` make
+  can_busoff, can_bus, irq, user, write_traces, sync`. `SilOs_SetTimeLimit` + `SilOs_WaitQuiescent` make
   `run_until` exact: virtual time never passes the limit, and quiescent means every core idle, nothing
   due and no timer callback in flight. Events arriving while paused run at the paused time.
 - `python/microsarsil` (`SilProcess`, `SilControl`, `SilUdpSocket`, python-can interface `silcan`,
