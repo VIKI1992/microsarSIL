@@ -1,4 +1,4 @@
-# Integrating a MICROSAR Classic project (status: plan for M6, informed by the BR1 Cabin ECU)
+# Integrating a MICROSAR Classic project (M6, informed by the BR1 Cabin ECU)
 
 This is the path from the demo to running `C:\br1_cabin_ecu` on the host. Nothing from the SIP
 or the project enters this repository; the integration lives in the project's build (or a sibling
@@ -84,3 +84,31 @@ DaVinci instead works through a generated `Rte_Hook.c` (M5).
 - `SchM_Enter_*` are `SuspendAllInterrupts` (625 sites): fine with SilOs interrupt locks.
 - `CDD_FETK` includes an OS HAL header and talks to ETAS hardware: excluded from the SIL build.
 - NvM/Fee: the NXP Fee sits on MemAcc/Mem_43_INFLS; the SIL Fee replaces all three.
+
+## 7. Host compile probe (2026-10-31)
+
+`tools/probe_sip_compile.py` syntax-checks real project sources with the host compiler, the SIL
+headers and the generated configuration (no virtual MCAL implementation needed yet):
+
+```
+python tools/gen_os_cfg.py -o build/gen-cabin --isr-bodies-from C:\br1_cabin_ecu\BSw\DaVinciWorkSpace\Generated_BSW ^
+    <Os ecuc> <EcuC ecuc>
+python tools/gen_mcal_cfg.py -o build/gen-cabin-mcal <Mcu Dio Port Spi Pwm Icu Adc Gpt Can I2c Uart MemAcc Fee Crypto ecuc files>
+python tools/probe_sip_compile.py C:\br1_cabin_ecu --gen build/gen-cabin --extra-inc sil/mcal/inc build/gen-cabin-mcal ^
+    --defines SIL_CPU_TYPE=32 --out build/probe_cabin.md
+```
+
+Result on the Cabin ECU: **43 of 45** probed files compile cleanly on the 64-bit MinGW host:
+all 29 Vector BSW modules of the probe list (Det, Crc, VStdLib, EcuM, BswM, Com, PduR, CanIf,
+CanSM, CanNm, Nm, ComM, CanTp, Dcm, Dem, NvM, MemIf, WdgM, WdgIf, LinIf, LinSM, IpduM, Csm,
+CryIf, E2E, E2EXf, FiM, Xcp, CanXcp), the complete RTE (`Rte.c`, both
+`Rte_OsApplication_Trusted_Core*.c`), the generated BswM/EcuM/CanIf/Com configuration, the OS
+callouts, the stack monitor SWC and the I2C/AIN/BTS7222/Lifetimer CDDs. The two remaining files
+are hardware init code that the SIL replaces anyway: `EcuM_Callout_Stubs.c` (`ddr_init.h`, DDR
+controller) and `BswM_Callout_Stubs.c` (`CDD_Sbc_Fs8x.h`, the SBC driver stub comes with M4).
+
+What made this work: `sil/hal` headers first on the include path, `SIL_CPU_TYPE=32` so the
+EcuC/CanIf CPU type checks pass, `E_SAFETY_INVALID_*` values from the E2E transformer spec,
+`sil/mcal/inc` with the AUTOSAR/RTD API headers (types match the Vector
+`Can_DrvGeneralTypes_3rdPartyCanDrv.h` layout), and the generated symbolic names
+(`McuConf_*`, `DioConf_*`, `SpiConf_*`, ... 975 names for the Cabin ECU).

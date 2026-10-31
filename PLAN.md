@@ -17,7 +17,7 @@ below come from it.
 | M3 virtual CAN, UDP backend, control server, pytest package | next |
 | M4 SPI + peripheral models, SIL Kit, virtual LIN, remaining MCAL | after M3 |
 | M5 profiling depth (Rte_Hook.c, flows, stats, ET model) | partly done: `siltrace.py stats`, Perfetto host-cost view, Rimac `.bin` export, `SilOs_ConsumeTime`; `gen_rte_hooks.py` open |
-| M6 real SIP integration kit | `check_sip.py` and `gen_os_cfg.py` verified on the Cabin ECU config; hal headers exist; virtual MCAL and `cmake/Sip.cmake` open |
+| M6 real SIP integration kit | `check_sip.py`, `gen_os_cfg.py`, `gen_mcal_cfg.py` verified on the Cabin ECU; host compile probe: 43/45 project files (all Vector BSW, full RTE, CDDs) syntax-check on the host with `sil/hal` + `sil/mcal/inc` headers; virtual MCAL implementations and `cmake/Sip.cmake` open |
 
 ### What the project review changed
 

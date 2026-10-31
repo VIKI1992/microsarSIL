@@ -26,7 +26,11 @@ Cortex-R52 cores). Its inventory is in `docs/reference-project-br1-cabin.md`; th
 - `tools/gen_os_cfg.py` generates the OS configuration from the project's **ECUC arxml** (the same
   files DaVinci Configurator writes): verified against the demo and the BR1 Cabin ECU
   (18 tasks, 71 ISRs, 101 alarms, 84 spinlocks, 8 IOC channels, 2 cores).
-- `tools/check_sip.py` inventories a MICROSAR project (OS API, Vector extensions, MCAL API surface).
+- `tools/check_sip.py` inventories a MICROSAR project (OS API, Vector extensions, MCAL API surface);
+  `tools/gen_mcal_cfg.py` generates the MCAL symbolic names (`DioConf_*`, `SpiConf_*`, ...);
+  `tools/probe_sip_compile.py` syntax-checks real project sources on the host. Result for the
+  Cabin ECU: 43 of 45 probed files (all Vector BSW modules, the full RTE, CDDs) compile with the
+  SIL headers (`sil/hal`, `sil/mcal/inc`) and generated configuration (see `docs/integrating-microsar.md`).
 - `demo/` two core stand-in ECU, `tests/unit/test_os.c` 103 OSEK semantics checks, CI on
   Linux (gcc, clang+ASan, TSan) and Windows (MinGW, MSVC).
 
@@ -60,7 +64,8 @@ sil/hal       Compiler.h, Platform_Types.h, Std_Types.h, MemMap.h for the host
 sil/os        SilOs (Os_Api.h public API, SilOs.h SIL specific API, compat/ MICROSAR headers)
 sil/trace     recorder and writers
 sil/runtime   command line runtime (SilRt_Main)
-tools/        ecuc.py, gen_os_cfg.py, check_sip.py, siltrace.py, ecuc_build.py
+tools/        ecuc.py, gen_os_cfg.py, gen_mcal_cfg.py, check_sip.py, probe_sip_compile.py, siltrace.py, ecuc_build.py
+sil/mcal/inc  virtual MCAL API headers (AUTOSAR + NXP RTD names): Can_43_FLEXCAN, Spi, Adc, Dio, Port, Gpt, Icu, Pwm, Mcu, ...
 demo/         DemoEcu.arxml (built by make_demo_ecuc.py) and the demo application
 tests/        unit/test_os.c (OS semantics), tools/ (pytest for the generators)
 docs/         reference project inventory, architecture, integration guide

@@ -1,10 +1,9 @@
 /*
- * Compiler_Cfg.h - default (empty) memory class and pointer class definitions.
+ * Compiler_Cfg.h - default (empty) memory class and pointer class definitions for the demo.
  *
- * A real MICROSAR project ships its own Compiler_Cfg.h chain; when integrating a SIP
- * put the project's include directory *after* sil/hal so that this file is replaced
- * only if the project does not provide one, or pass -DSIL_USE_PROJECT_COMPILER_CFG
- * and add the project directory before sil/hal.
+ * A real MICROSAR project ships its own Compiler_Cfg.h chain (BR1: BSw/StartUpCode/inc), which
+ * ends in the generated Os_Compiler_Cfg.h. Do not put sil/hal/default on the include path of a
+ * real project; sil/hal (Compiler.h, Platform_Types.h, Std_Types.h, MemMap.h) is enough.
  */
 #ifndef COMPILER_CFG_H
 #define COMPILER_CFG_H

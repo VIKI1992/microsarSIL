@@ -52,9 +52,14 @@ sil_strict_warnings(siltrace)
 # ---- SilOs: AUTOSAR/MICROSAR OS emulation ---------------------------------------------------
 add_library(silos STATIC
   sil/os/SilOs_Core.c sil/os/SilOs_Task.c sil/os/SilOs_Time.c sil/os/SilOs_Compat.c sil/os/SilOs_Ioc.c)
-target_include_directories(silos PUBLIC sil/os sil/os/compat sil/hal)
+target_include_directories(silos PUBLIC sil/os sil/os/compat sil/hal sil/hal/default)
 target_link_libraries(silos PUBLIC siltrace silport)
 sil_strict_warnings(silos)
+
+# ---- virtual MCAL (API headers now, implementations with M3/M4) -------------------------------
+add_library(silmcal INTERFACE)
+target_include_directories(silmcal INTERFACE sil/mcal/inc)
+target_link_libraries(silmcal INTERFACE silos)
 
 # ---- runtime ------------------------------------------------------------------------------
 add_library(silruntime STATIC sil/runtime/sil_runtime.c)

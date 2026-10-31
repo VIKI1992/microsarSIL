@@ -35,8 +35,9 @@ typedef struct {
     uint8 sw_patch_version;
 } Std_VersionInfoType;
 
-#define E_SAFETY_INVALID_REP (0x01u)
-#define E_SAFETY_INVALID_SEQ (0x02u)
-#define E_SAFETY_INVALID_CRC (0x03u)
+/* AUTOSAR_SWS_E2ETransformer values (checked by MICROSAR E2EXf.h) */
+#define E_SAFETY_INVALID_REP (0x41U)
+#define E_SAFETY_INVALID_SEQ (0x42U)
+#define E_SAFETY_INVALID_CRC (0x43U)
 
 #endif /* STD_TYPES_H */

@@ -29,11 +29,17 @@
 #define HIGH_BYTE_FIRST (0)
 #define LOW_BYTE_FIRST (1)
 
-#if defined(_WIN64) || defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)
+/* SIL_CPU_TYPE=32 lets a 64-bit host build report the target's CPU_TYPE to configuration checks
+ * (MICROSAR EcuM compares it with the EcuC setting). Pointer/integer casts are still caught by
+ * -Werror=pointer-to-int-cast in the SIP build. */
+#if defined(SIL_CPU_TYPE)
+#define CPU_TYPE (SIL_CPU_TYPE)
+#elif defined(_WIN64) || defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)
 #define CPU_TYPE (CPU_TYPE_64)
 #else
 #define CPU_TYPE (CPU_TYPE_32)
 #endif
+#define PLATFORM_SUPPORT_SINT64_UINT64
 
 #define CPU_BIT_ORDER (LSB_FIRST)
 #if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
