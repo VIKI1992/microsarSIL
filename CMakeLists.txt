@@ -26,7 +26,7 @@ endif()
 message(STATUS "microsarSIL: python ${SIL_PYTHON}")
 
 if(WIN32)
-  add_compile_definitions(_CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN NOMINMAX)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS _WINSOCK_DEPRECATED_NO_WARNINGS WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 if(MSVC)
   add_compile_options(/utf-8)
@@ -56,15 +56,19 @@ target_include_directories(silos PUBLIC sil/os sil/os/compat sil/hal sil/hal/def
 target_link_libraries(silos PUBLIC siltrace silport)
 sil_strict_warnings(silos)
 
-# ---- virtual MCAL (API headers now, implementations with M3/M4) -------------------------------
-add_library(silmcal INTERFACE)
-target_include_directories(silmcal INTERFACE sil/mcal/inc)
-target_link_libraries(silmcal INTERFACE silos)
+# ---- virtual MCAL: API headers, virtual CAN driver and bus backends (SPI & co. with M4) --------
+add_library(silmcal STATIC sil/mcal/src/Can_43_FLEXCAN.c sil/bus/sil_bus.cpp)
+target_include_directories(silmcal PUBLIC sil/mcal/inc sil/bus)
+target_link_libraries(silmcal PUBLIC silos)
+if(WIN32)
+  target_link_libraries(silmcal PUBLIC ws2_32)
+endif()
+sil_strict_warnings(silmcal)
 
-# ---- runtime ------------------------------------------------------------------------------
-add_library(silruntime STATIC sil/runtime/sil_runtime.c)
-target_include_directories(silruntime PUBLIC sil/runtime)
-target_link_libraries(silruntime PUBLIC silos)
+# ---- runtime (command line, control server) --------------------------------------------------
+add_library(silruntime STATIC sil/runtime/sil_runtime.c sil/ctrl/sil_ctrl.cpp sil/ctrl/sil_ctrl_net.cpp)
+target_include_directories(silruntime PUBLIC sil/runtime sil/ctrl)
+target_link_libraries(silruntime PUBLIC silos silmcal)
 sil_strict_warnings(silruntime)
 
 if(SIL_BUILD_DEMO)

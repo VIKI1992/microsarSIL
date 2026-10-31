@@ -9,7 +9,7 @@ CMake options (see `docs/integrating-microsar.md`).
 Reference project: the BR1 Cabin ECU (`C:\br1_cabin_ecu`, MICROSAR Classic on NXP S32E288, two
 Cortex-R52 cores). Its inventory is in `docs/reference-project-br1-cabin.md`; the plan in `PLAN.md`.
 
-## What works today (M0 + M1 + M2 of the plan)
+## What works today (M0 to M3 of the plan)
 
 - `sil/os` **SilOs**: OSEK/AUTOSAR OS API (tasks basic/extended, FULL/NON, multiple activation,
   events, resources with ceiling, alarms incl. autostart, hardware and software counters, schedule
@@ -31,8 +31,25 @@ Cortex-R52 cores). Its inventory is in `docs/reference-project-br1-cabin.md`; th
   `tools/probe_sip_compile.py` syntax-checks real project sources on the host. Result for the
   Cabin ECU: 43 of 45 probed files (all Vector BSW modules, the full RTE, CDDs) compile with the
   SIL headers (`sil/hal`, `sil/mcal/inc`) and generated configuration (see `docs/integrating-microsar.md`).
-- `demo/` two core stand-in ECU, `tests/unit/test_os.c` 103 OSEK semantics checks, CI on
-  Linux (gcc, clang+ASan, TSan) and Windows (MinGW, MSVC).
+- `sil/mcal/src/Can_43_FLEXCAN.c` **virtual CAN driver** with the NXP RTD API names
+  (`Can_43_FLEXCAN_Init/SetControllerMode/Write/MainFunction_*`, error state, interrupt control) and
+  the FlexCAN handler entry points (`CAN<n>_ORED_*_MB_IRQHandler`, ...) that the OS wrappers call.
+  Controllers, hardware objects and filters come from the project's `Can` ECUC through
+  `tools/gen_can_cfg.py` (verified on the Cabin ECU: 6 controllers, 129 HOHs, 262 filters). RX reaches
+  `CanIf_RxIndication` in ISR context, TX confirmations arrive after the frame's bus time, bus-off can
+  be injected and recovered.
+- `sil/bus` **bus backends**: `null`, `loop:<name>` (in-process link between controllers) and
+  `udp[:<group>:<port>]` (multicast, Windows and Linux; wire format in `sil_bus.h`).
+- `sil/ctrl` **control server** (`--control`): newline JSON over TCP to step virtual time exactly
+  (`run_until`, `step`, `pause`, `resume`), read statistics, inject and capture CAN frames, raise
+  ISRs, force bus-off, write traces and stop the ECU.
+- `python/microsarsil`: `SilProcess` (starts an ECU and finds its control port), `SilControl` (the
+  commands above), `SilUdpSocket` (the UDP bus without dependencies), a python-can interface
+  (`can.Bus(interface="silcan", channel="239.0.0.1:52000")`) and pytest fixtures (`sil_exe`, `sil_ecu`).
+- `demo/` two core stand-in ECU with two CAN controllers wired back to back and a CanIf stand-in,
+  `tests/unit/test_os.c` 103 OSEK semantics checks, `tests/sil` pytest (control server, time stepping
+  determinism, CAN over the in-process link and over UDP), CI on Linux (gcc, clang+ASan, TSan) and
+  Windows (MinGW, MSVC).
 
 ## Build (this machine: MinGW-w64 GCC 12.2 from Br1Tools)
 
@@ -56,6 +73,27 @@ and idle per core in virtual time; process "Host cost" the same lanes in host ti
 `--time=realtime:4` runs four times faster than wall clock; `--rimac=<dir>` writes `core<n>.bin`
 and `id_*.xml` for `Tests/Profiling/ProfilingAnalyzeData.py`.
 
+## Drive the demo from Python
+
+```
+python -m pytest -q tests/sil        # finds build/*/demo/demo_ecu(.exe) or uses MICROSARSIL_DEMO_EXE
+```
+
+```python
+import sys; sys.path.insert(0, "python")
+from microsarsil import SilProcess
+with SilProcess("build/windows-mingw-br1tools/demo/demo_ecu.exe", paused=True) as ecu:
+    c = ecu.control
+    c.run_until(0.5)                        # exact: t = 500 ms and nothing in flight
+    c.can_send(0, 0x201, bytes([1, 2]))     # a frame into controller 0
+    c.step(0.002)
+    print([f for f in c.can_recv() if f.dir == "tx"])   # the 0x301 reply
+    print(c.stats()["tasks"])
+```
+
+`demo_ecu --can0=udp --time=realtime` puts controller 0 on the UDP bus (239.0.0.1:52000), where
+python-can (`interface="silcan"`) or any other process using the same datagram format sees it.
+
 ## Layout
 
 ```
@@ -63,10 +101,14 @@ sil/port      host abstraction (threads, semaphores, clocks) in C++17 behind a C
 sil/hal       Compiler.h, Platform_Types.h, Std_Types.h, MemMap.h for the host
 sil/os        SilOs (Os_Api.h public API, SilOs.h SIL specific API, compat/ MICROSAR headers)
 sil/trace     recorder and writers
-sil/runtime   command line runtime (SilRt_Main)
-tools/        ecuc.py, gen_os_cfg.py, gen_mcal_cfg.py, check_sip.py, probe_sip_compile.py, siltrace.py, ecuc_build.py
+sil/runtime   command line runtime (SilRt_Main, --control, --paused, --can<N>=)
+sil/ctrl      control server (newline JSON over TCP)
+sil/bus       CAN bus backends: null, loop (in-process), UDP multicast
 sil/mcal/inc  virtual MCAL API headers (AUTOSAR + NXP RTD names): Can_43_FLEXCAN, Spi, Adc, Dio, Port, Gpt, Icu, Pwm, Mcu, ...
-demo/         DemoEcu.arxml (built by make_demo_ecuc.py) and the demo application
-tests/        unit/test_os.c (OS semantics), tools/ (pytest for the generators)
+sil/mcal/src  virtual CAN driver (Can_43_FLEXCAN API)
+tools/        ecuc.py, gen_os_cfg.py, gen_can_cfg.py, gen_mcal_cfg.py, check_sip.py, probe_sip_compile.py, siltrace.py, ecuc_build.py
+python/       microsarsil package (SilProcess, SilControl, UDP bus, python-can interface, pytest fixtures)
+demo/         DemoEcu.arxml + DemoEcu_Can.arxml (built by make_demo_ecuc.py) and the demo application
+tests/        unit/test_os.c (OS semantics), tools/ (pytest for the generators), sil/ (pytest against the demo ECU)
 docs/         reference project inventory, architecture, integration guide
 ```

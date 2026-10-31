@@ -70,6 +70,34 @@ tables, `Os_Isr_<fn>` wrappers for driver handlers), `Os_Ioc_Lcfg.h/.c`, `Os_Sta
 have distinct bits (explicit `OsEventMask` values are kept). ISR priorities follow the ARM GIC
 convention (lower value = more urgent) unless `--isr-prio-order=higher-is-higher`.
 
+## Virtual CAN and bus backends
+
+`sil/mcal/src/Can_43_FLEXCAN.c` implements the NXP RTD CAN API on top of `sil/bus`. Each controller
+has a host mutex, an RX queue, a TX-confirmation queue and per-HOH in-flight counters. A frame from
+the backend (the UDP receive thread, or the sender's thread for the in-process link) is queued and
+the controller's RX ISR is raised with `SilOs_RaiseIrq`; the OS runs the generated handler
+(`CAN<n>_ORED_0_31_MB_IRQHandler` -> `SilCan_Isr`), which matches FULL objects first, then BASIC
+filters, and calls `CanIf_RxIndication` in ISR context. `Can_43_FLEXCAN_Write` sends immediately
+and schedules a virtual timer for the frame time (47/67 control bits at the nominal rate, data bits
+at the FD rate); its callback queues the confirmation and raises the TX ISR. Driver mutexes are
+never held while an ISR is raised, because the ISR takes the same mutex. ISRs are found by the
+handler name in `OsIsrSpecialFunctionName` (`SilOs_IsrByHandler`), so the OS tables of a MICROSAR
+project match without renaming. `tools/gen_can_cfg.py` emits `SilCan_Cfg.c` (controllers, hardware
+objects, filters, handler functions) from the `Can` ECUC; `silos_add_ecu()` runs it together with
+`gen_os_cfg.py` and `gen_mcal_cfg.py`.
+
+## Control server
+
+`sil/ctrl` serves newline delimited JSON on TCP (`--control`). Time stepping rests on two OS hooks:
+`SilOs_SetTimeLimit` caps the virtual clock (the time driver never jumps past it, so alarms at or
+after the limit wait while zero-time activity still runs) and `SilOs_WaitQuiescent` blocks a host
+thread until the clock reached the target and every core is idle with nothing due and no timer
+callback in flight. `run_until` is therefore exact and repeatable: the same command sequence yields
+the same task activations, ISR runs and bus frames. External events (UDP frames, `can_send`, `irq`)
+that arrive while paused are processed at the paused time. The socket code is a separate
+translation unit (`sil_ctrl_net.cpp`) because `windows.h` declares `SetEvent(HANDLE)`, which clashes
+with the OS API, and the AUTOSAR `CONST` macro breaks `winnt.h`.
+
 ## Not emulated
 
 Memory protection, timing protection, service protection, Cat1 ISRs, stack monitoring (stack

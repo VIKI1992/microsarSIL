@@ -20,7 +20,7 @@ def test_demo_parses():
     e = Ecuc.load([DEMO])
     os_ = e.module("Os")
     assert len(os_.top("OsTask")) == 12
-    assert len(os_.find("OsIsr")) == 7
+    assert len(os_.find("OsIsr")) == 13
     t = os_.byname("Task_1ms_Core0")
     assert t is not None and t.getint("OsTaskPriority") == 30
     assert t.ref("OsTaskEventRef") == ["Ev_1ms", "Ev_CanRx", "Ev_SpiDone"]

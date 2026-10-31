@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "microsarsil"
+version = "0.3.0"
+description = "Test automation for microsarSIL: process control, control server client, virtual CAN bus"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+can = ["python-can>=4.0"]
+test = ["pytest>=7"]
+
+[project.entry-points."can.interface"]
+silcan = "microsarsil.udpbus:SilCanBus"
+
+[project.entry-points.pytest11]
+microsarsil = "microsarsil.pytest_plugin"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["microsarsil*"]

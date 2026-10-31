@@ -55,7 +55,7 @@ small SIL copy of that file section.
 
 | Module | Must provide | Model |
 |---|---|---|
-| Can_43_FLEXCAN | `Init, SetControllerMode, Write, MainFunction_{Read,Write,BusOff,Mode,Wakeup}(+_CanMainFunctionRWPeriods_n), GetControllerErrorState, GetControllerRx/TxErrorCounter, SetBaudrate, DisableControllerInterrupts`, `CAN<n>_ORED*/EnhancedData_IRQHandler` | per controller queue + bus backend (UDP, SIL Kit, SocketCAN); RX in ISR context via `CanIf_RxIndication`, TX confirmation via `CanIf_TxConfirmation` |
+| Can_43_FLEXCAN (**done, M3**) | `Init, SetControllerMode, Write, MainFunction_{Read,Write,BusOff,Mode,Wakeup}(+_CanMainFunctionRWPeriods_n), GetControllerErrorState, GetControllerRx/TxErrorCounter, SetBaudrate, DisableControllerInterrupts`, `CAN<n>_ORED*/EnhancedData_IRQHandler` | per controller queue + bus backend (UDP, SIL Kit, SocketCAN); RX in ISR context via `CanIf_RxIndication`, TX confirmation via `CanIf_TxConfirmation` |
 | Lin (Vector driver replaced) | `Lin_Init/InitMemory/SendFrame/GetStatus/GoToSleep(Internal)/Wakeup(Internal)/CheckWakeup/Interrupt` | 4 master channels, frame response from LDF or Python slaves, `LinIsr_n` through `Lin_Interrupt` |
 | Spi | `Init, SetupEB, SyncTransmit, AsyncTransmit, GetSequenceResult, GetStatus, GetHWUnitStatus, SetAsyncMode, SetHWUnitAsyncMode, MainFunction_Handling`, `Spi_Ip_SPI_{2,3,5,7}_IRQHandler` | sequences/jobs/channels from `SpiSequence`/`SpiJob`/`SpiChannel`; slave models for ADS7038 (x10), BTS710336 (x3), BTS722204 (x2), DRV8910, L9305 |
 | Dio, Port, Pwm, Icu, Adc, Gpt | the APIs listed in the inventory | `VirtualIo` named values settable from the control server; Icu edges and Adc groups raise their eMIOS/ADC ISRs |
@@ -68,6 +68,13 @@ small SIL copy of that file section.
 `Generated_BSW/include/<Mod>_Cfg.h` are replaced by SIL versions generated from the MCAL ECUC
 files so that the symbolic names (`DioConf_DioChannel_*`, `SpiConf_SpiSequence_*`, ...) keep their
 values.
+
+CAN specifics: `Can_43_FLEXCAN_Init(NULL_PTR)` as the project calls it is accepted;
+`tools/gen_can_cfg.py --channels 13` emits handler functions for FlexCAN channels the OS references
+but no controller uses (the Cabin ECU has ISRs for channel 13); the generated `Can_43_FLEXCAN_PBcfg.c`
+of the project is not compiled. `sil/hal/default/ComStack_Types.h` and `CanIf_Cbk.h` are fallbacks for
+builds without a SIP: the project's own headers (`Sip/Components/_Common`, `CanIf`) must come first
+on the include path.
 
 ## 5. Runnable tracing
 

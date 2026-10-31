@@ -74,12 +74,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("arxml", nargs="+")
     ap.add_argument("-o", "--outdir", required=True)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--skip", default="Os", help="comma separated modules to ignore (default: Os)")
     args = ap.parse_args(argv)
+    skip = {m for m in args.skip.split(",") if m}
     out = Path(args.outdir)
     out.mkdir(parents=True, exist_ok=True)
     ecuc = Ecuc.load(args.arxml)
     total = 0
     for mname, mod in ecuc.modules.items():
+        if mname in skip:
+            continue
         lines: List[str] = []
         auto: List[str] = []
         for c in mod.all():

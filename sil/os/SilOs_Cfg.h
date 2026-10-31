@@ -51,6 +51,7 @@ typedef struct {
     uint8 initialEnabled;     /* OsIsrInitialEnableInterruptSource */
     uint8 kind;               /* 0 user, 1 system timer, 2 xsignal */
     uint32 source;            /* OsIsrInterruptSource (informational) */
+    const char *handler;      /* OsIsrSpecialFunctionName (driver handler) or NULL_PTR */
 } SilOs_IsrCfg;
 
 typedef struct {

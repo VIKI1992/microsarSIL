@@ -469,9 +469,11 @@ def emit_lcfg_c(m: Model, src: str) -> str:
         if kind != 0:
             ien = 1
         src_ = isr.getint("OsIsrInterruptSource", 0)
-        o.append(f'  {{ "{isr.name}", {m.isrEntry[isr.name]}, {m.obj_core(isr.name, 0)}u, {m.obj_app(isr.name)}, {m.isr_urgency(isr)}u, {cat}u, {nesting}u, {ien}u, {kind}u, {src_}u }},')
+        special = isr.get("OsIsrSpecialFunctionName", "") if isr.getbool("OsIsrUseSpecialFunction", True) else ""
+        handler = f'"{special}"' if special else "NULL_PTR"
+        o.append(f'  {{ "{isr.name}", {m.isrEntry[isr.name]}, {m.obj_core(isr.name, 0)}u, {m.obj_app(isr.name)}, {m.isr_urgency(isr)}u, {cat}u, {nesting}u, {ien}u, {kind}u, {src_}u, {handler} }},')
     if not m.isrs:
-        o.append('  { "none", NULL_PTR, 0u, 0xFFFFu, 0u, 2u, 0u, 0u, 0u, 0u },')
+        o.append('  { "none", NULL_PTR, 0u, 0xFFFFu, 0u, 2u, 0u, 0u, 0u, 0u, NULL_PTR },')
     o.append("};")
     o.append("")
     # counters

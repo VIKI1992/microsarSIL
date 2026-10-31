@@ -218,7 +218,7 @@ static void request_stop_locked(int code) {
 }
 
 void silos_time_maybe_advance(void) {
-    uint64 now, target;
+    uint64 now, target, limit;
     uint32 c;
     if (silos_g.shutdown) return;
     if (silos_g.opt.timeMode != SILOS_TIME_VIRTUAL) return;
@@ -230,6 +230,9 @@ void silos_time_maybe_advance(void) {
         if (core->started && core->consumeTarget < target) target = core->consumeTarget;
     }
     if (silos_g.opt.durationNs != 0u && silos_g.opt.durationNs < target) target = silos_g.opt.durationNs;
+    limit = sil_atomic_load64(&silos_g.timeLimitNs);
+    if (target > now && limit <= now) return; /* paused at the external time limit */
+    if (limit < target) target = limit;
     if (target == UINT64_MAX) return; /* quiescent: nothing will ever happen by itself */
     if (target > now) {
         sil_atomic_store64(&silos_g.nowNs, target);
@@ -280,7 +283,7 @@ static void realtime_driver(void *arg) {
 uint32 SilOs_TimerSchedule(uint64 delayNs, SilOs_TimerFn fn, void *arg) {
     uint32 i, h = 0;
     silos_lock();
-    for (i = 0; i < 64u; ++i) {
+    for (i = 0; i < SILOS_MAX_VTIMERS; ++i) {
         if (!silos_g.vtimers[i].used) {
             silos_g.vtimers[i].used = 1u;
             silos_g.vtimers[i].due = SilOs_ClockNow() + delayNs;
@@ -300,7 +303,7 @@ uint32 SilOs_TimerSchedule(uint64 delayNs, SilOs_TimerFn fn, void *arg) {
 void SilOs_TimerCancel(uint32 handle) {
     uint32 i;
     silos_lock();
-    for (i = 0; i < 64u; ++i)
+    for (i = 0; i < SILOS_MAX_VTIMERS; ++i)
         if (silos_g.vtimers[i].used && silos_g.vtimers[i].handle == handle) silos_g.vtimers[i].used = 0u;
     silos_unlock();
 }
@@ -310,7 +313,7 @@ uint64 silos_vtimers_next_locked(void);
 uint64 silos_vtimers_next_locked(void) {
     uint64 best = UINT64_MAX;
     uint32 i;
-    for (i = 0; i < 64u; ++i)
+    for (i = 0; i < SILOS_MAX_VTIMERS; ++i)
         if (silos_g.vtimers[i].used && silos_g.vtimers[i].due < best) best = silos_g.vtimers[i].due;
     return best;
 }
@@ -321,15 +324,17 @@ void silos_vtimers_fire_locked(void);
 void silos_vtimers_fire_locked(void) {
     uint64 now = SilOs_ClockNow();
     uint32 i;
-    for (i = 0; i < 64u; ++i) {
+    for (i = 0; i < SILOS_MAX_VTIMERS; ++i) {
         if (silos_g.vtimers[i].used && silos_g.vtimers[i].due <= now) {
             SilOs_TimerFn fn = silos_g.vtimers[i].fn;
             void *arg = silos_g.vtimers[i].arg;
             silos_g.vtimers[i].used = 0u;
             if (fn != NULL) {
+                silos_g.firing++;
                 silos_unlock();
                 fn(arg);
                 silos_lock();
+                silos_g.firing--;
             }
         }
     }
@@ -729,6 +734,7 @@ void SilOs_Setup(const SilOs_RuntimeOptions *opt, SilOs_CoreEntryFn coreEntry) {
     silos_g.progress = sil_cond_create();
     silos_g.hostOriginNs = sil_clock_ns();
     silos_g.nowNs = 0u;
+    silos_g.timeLimitNs = UINT64_MAX;
     for (c = 0; c < SILOS_MAX_CORES; ++c) {
         SilOs_Core *core = &silos_g.cores[c];
         char name[32];
@@ -1007,6 +1013,39 @@ int SilOs_WaitShutdown(void) {
 }
 
 /* ------------------------------------------------------------------------- */
+/* external time control                                                     */
+void SilOs_SetTimeLimit(uint64 limitNs) {
+    silos_lock();
+    sil_atomic_store64(&silos_g.timeLimitNs, limitNs);
+    silos_unlock();
+    silos_notify();
+}
+
+uint64 SilOs_GetTimeLimit(void) { return sil_atomic_load64(&silos_g.timeLimitNs); }
+
+int SilOs_WaitQuiescent(uint64 atNs, uint64 hostTimeoutNs) {
+    uint64 deadline = sil_clock_ns() + hostTimeoutNs;
+    int ok = 0;
+    silos_lock();
+    for (;;) {
+        if (silos_g.shutdown) break;
+        if (silos_g.cores[silos_g.cfg->masterCore].osStarted) {
+            uint64 now;
+            silos_time_maybe_advance();
+            now = SilOs_ClockNow();
+            if (now >= atNs && silos_g.firing == 0u && all_cores_quiet() && silos_next_event_ns_locked() > now) {
+                ok = 1;
+                break;
+            }
+        }
+        if (sil_clock_ns() >= deadline) break;
+        sil_cond_wait_for(silos_g.progress, silos_g.lock, 2000000u);
+    }
+    silos_unlock();
+    return ok;
+}
+
+/* ------------------------------------------------------------------------- */
 /* execution time model and preemption points                                */
 void SilOs_ConsumeTime(uint64 ns) {
     SilOs_Core *core;
@@ -1056,3 +1095,13 @@ TaskType SilOs_TaskByName(const char *name) {
 
 uint32 SilOs_NumTasks(void) { return silos_g.cfg->numTasks; }
 uint32 SilOs_NumIsrs(void) { return silos_g.cfg->numIsrs; }
+
+ISRType SilOs_IsrByHandler(const char *handler) {
+    uint32 i;
+    if (handler == NULL || silos_g.cfg == NULL) return (ISRType)(silos_g.cfg != NULL ? silos_g.cfg->numIsrs : 0u);
+    for (i = 0; i < silos_g.cfg->numIsrs; ++i) {
+        const char *h = silos_g.cfg->isrs[i].handler;
+        if (h != NULL && strcmp(h, handler) == 0) return (ISRType)i;
+    }
+    return SilOs_IsrByName(handler);
+}

@@ -14,6 +14,11 @@
  *   --trace-records=<n>       ring size per core (default 262144)
  *   --pin-cores               pin core threads to host CPUs
  *   --quiet                   no banner
+ *   --control[=[host:]port]   control server (newline JSON over TCP), port 0 = ephemeral; prints
+ *                             "control: listening on <host>:<port>" to stderr
+ *   --paused                  start with the virtual time frozen at 0 (step it from the control server)
+ *   --can<N>=<spec>           bus backend of CAN controller N: null | loop:<name> | udp[:<group>:<port>]
+ *   --can=<spec>              bus backend of all CAN controllers
  */
 #ifndef SIL_RUNTIME_H
 #define SIL_RUNTIME_H
@@ -31,6 +36,12 @@ typedef struct {
     const char *btfPath;
     const char *rimacDir;
     int quiet;
+    int control;               /* start the control server */
+    const char *controlHost;   /* NULL = 127.0.0.1 */
+    unsigned controlPort;      /* 0 = ephemeral */
+    int paused;
+    const char *canAllSpec;    /* --can= */
+    const char *canSpec[16];   /* --can<N>= */
     int argc;
     char **argv;
 } SilRt_Options;

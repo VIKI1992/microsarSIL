@@ -52,11 +52,22 @@ SilOs_TimeMode SilOs_ClockMode(void);
 uint32 SilOs_TimerSchedule(uint64 delayNs, SilOs_TimerFn fn, void *arg);
 void SilOs_TimerCancel(uint32 handle);
 
+/* External time control (control server) ----------------------------------- */
+/* Virtual time never advances beyond the limit (UINT64_MAX = no limit). Startup and all
+ * zero-time activity still happen; alarms at or after the limit wait. */
+void SilOs_SetTimeLimit(uint64 limitNs);
+uint64 SilOs_GetTimeLimit(void);
+/* Block the calling host thread until the virtual clock reached `atNs` and no core can progress
+ * (or the OS shut down). hostTimeoutNs bounds the wait. Returns 1 if quiescent at atNs, 0 on timeout. */
+int SilOs_WaitQuiescent(uint64 atNs, uint64 hostTimeoutNs);
+
 /* Interrupt injection ----------------------------------------------------- */
 /* Thread safe, callable from any host thread, task, ISR or timer callback. */
 void SilOs_RaiseIrq(ISRType isr);
 /* Look up objects by name. Return the object count (invalid id) if unknown. */
 ISRType SilOs_IsrByName(const char *name);
+/* By OsIsrSpecialFunctionName (the driver handler, e.g. CAN0_ORED_0_31_MB_IRQHandler), then by name. */
+ISRType SilOs_IsrByHandler(const char *handler);
 TaskType SilOs_TaskByName(const char *name);
 uint32 SilOs_NumTasks(void);
 uint32 SilOs_NumIsrs(void);

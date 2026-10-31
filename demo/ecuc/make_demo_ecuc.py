@@ -41,6 +41,16 @@ os_.add(Cont("OsIsr", "Isr_SpiDone", {"OsIsrCategory": "CATEGORY_2", "OsIsrInter
 os_.add(Cont("OsIsr", "Isr_Button", {"OsIsrCategory": "CATEGORY_2", "OsIsrInterruptPriority": 33, "OsIsrEnableNesting": True,
                                       "OsIsrInitialEnableInterruptSource": True, "OsIsrStackSize": 1024}))
 
+# CAN driver ISRs on core 0: the special function names are the FlexCAN handler functions that
+# tools/gen_can_cfg.py emits; the OS wrappers Os_Isr_<handler> call them (as in the reference project)
+for ch in (0, 1):
+    for kind, handler in (("Rx", f"CAN{ch}_ORED_0_31_MB_IRQHandler"), ("Tx", f"CAN{ch}_ORED_32_63_MB_IRQHandler"),
+                          ("BusOff", f"CAN{ch}_ORED_IRQHandler")):
+        os_.add(Cont("OsIsr", f"CanIsr_{ch}_{kind}", {"OsIsrCategory": "CATEGORY_2", "OsIsrInterruptPriority": 32,
+                                                      "OsIsrEnableNesting": False, "OsIsrInitialEnableInterruptSource": True,
+                                                      "OsIsrSpecialFunctionName": handler, "OsIsrStackSize": 1024}))
+CAN_ISRS = [f"CanIsr_{ch}_{kind}" for ch in (0, 1) for kind in ("Rx", "Tx", "BusOff")]
+
 # events
 events = ["Ev_1ms", "Ev_10ms", "Ev_CanRx", "Ev_10ms_Core1", "Ev_Trigger_Core1", "Ev_SpiDone"]
 for e in events:
@@ -127,7 +137,7 @@ os_.add(Cont("OsApplication", "SystemApplication_OsCore1", {"OsTrusted": True},
 os_.add(Cont("OsApplication", "App_Core0", {"OsTrusted": True},
              {"OsApplicationCoreRef": "OsCore0",
               "OsAppTaskRef": ["InitTask_Core0", "Task_1ms_Core0", "Task_10ms_Core0", "Task_100ms_Core0", "Task_Bg_Core0", "Task_Hi_Core0", "Task_Coop_Core0"],
-              "OsAppIsrRef": ["Isr_CanRx", "Isr_SpiDone", "Isr_Button"],
+              "OsAppIsrRef": ["Isr_CanRx", "Isr_SpiDone", "Isr_Button"] + CAN_ISRS,
               "OsAppAlarmRef": ["Al_1ms_Core0", "Al_10ms_Core0", "Al_100ms_Core0"],
               "OsAppScheduleTableRef": ["SchTbl_Core0"], "OsAppResourceRef": ["Res_Shared"]}))
 os_.add(Cont("OsApplication", "App_Core1", {"OsTrusted": True},
@@ -137,4 +147,29 @@ os_.add(Cont("OsApplication", "App_Core1", {"OsTrusted": True},
 
 out = Path(__file__).resolve().parent / "DemoEcu.arxml"
 os_.write(out)
+print(f"wrote {out}")
+
+# ---- Can module (NXP RTD style container names): two controllers wired back to back by the demo ----
+can = EcucModule("Can", "/TS_T40D34M50I0R0/Can")
+can.add(Cont("CanGeneral", "CanGeneral", {"CanDevErrorDetect": False, "CanMainFunctionRwPeriod": 0.001}))
+for ch in (0, 1):
+    can.add(Cont("CanController", f"CT_CAN{ch}",
+                 {"CanControllerId": ch, "CanHwChannel": f"FLEXCAN_{ch}", "CanControllerActivation": True,
+                  "CanRxProcessing": "INTERRUPT", "CanTxProcessing": "INTERRUPT", "CanBusoffProcessing": "INTERRUPT"},
+                 {"CanControllerDefaultBaudrate": f"CT_CAN{ch}/Baud500"},
+                 [Cont("CanControllerBaudrateConfig", "Baud500", {"CanControllerBaudRate": 500, "CanControllerBaudRateConfigID": 0})]))
+
+def hoh(name, oid, ctrl, kind, handle, idtype, count=1, filters=()):
+    subs = [Cont("CanHwFilter", f"F{i}", {"CanHwFilterCode": code, "CanHwFilterMask": mask}) for i, (code, mask) in enumerate(filters)]
+    can.add(Cont("CanHardwareObject", name, {"CanObjectId": oid, "CanObjectType": kind, "CanHandleType": handle, "CanIdType": idtype,
+                                             "CanHwObjectCount": count}, {"CanControllerRef": ctrl}, subs))
+
+hoh("Can0_Tx", 0, "CT_CAN0", "TRANSMIT", "BASIC", "MIXED", 8)
+hoh("Can0_Rx_Cmd", 1, "CT_CAN0", "RECEIVE", "BASIC", "STANDARD", 1, [(0x200, 0x700)])   # commands 0x200..0x2FF
+hoh("Can0_Rx_Ext", 2, "CT_CAN0", "RECEIVE", "BASIC", "EXTENDED", 1)                      # every extended id
+hoh("Can1_Tx", 3, "CT_CAN1", "TRANSMIT", "BASIC", "MIXED", 8)
+hoh("Can1_Rx_Status", 4, "CT_CAN1", "RECEIVE", "FULL", "STANDARD", 1, [(0x100, 0x7FF)]) # the status frame
+hoh("Can1_Rx_Any", 5, "CT_CAN1", "RECEIVE", "BASIC", "MIXED", 1)
+out = Path(__file__).resolve().parent / "DemoEcu_Can.arxml"
+can.write(out)
 print(f"wrote {out}")

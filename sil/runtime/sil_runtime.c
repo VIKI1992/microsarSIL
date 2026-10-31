@@ -1,6 +1,8 @@
 /* sil_runtime.c - command line runtime around SilOs. */
 #include "sil_runtime.h"
+#include "SilCan.h"
 #include "SilTrace.h"
+#include "sil_ctrl.h"
 #include "sil_port.h"
 
 #include <signal.h>
@@ -17,7 +19,8 @@ void SilRt_Usage(const char *prog) {
             "  --time=virtual | --time=realtime[:factor]\n"
             "  --duration=<seconds>   stop after this virtual time (0 = until ShutdownOS)\n"
             "  --trace=<file.siltrace> --perfetto=<file.json> --btf=<file.btf> --rimac=<dir>\n"
-            "  --trace-records=<n> --pin-cores --quiet --help\n",
+            "  --trace-records=<n> --pin-cores --quiet --help\n"
+            "  --control[=[host:]port] --paused --can<N>=<spec> --can=<spec>\n",
             prog);
 }
 
@@ -64,6 +67,35 @@ int SilRt_ParseArgs(SilRt_Options *opt, int argc, char **argv) {
             opt->quiet = 1;
         } else if (starts(a, "--seed=")) {
             opt->os.seed = (uint32)atol(a + 7);
+        } else if (strcmp(a, "--control") == 0 || starts(a, "--control=")) {
+            opt->control = 1;
+            if (a[9] == '=') {
+                const char *v = a + 10;
+                const char *colon = strrchr(v, ':');
+                if (colon != NULL) {
+                    static char host[64];
+                    size_t n = (size_t)(colon - v);
+                    if (n >= sizeof host) n = sizeof host - 1u;
+                    memcpy(host, v, n);
+                    host[n] = '\0';
+                    opt->controlHost = host;
+                    opt->controlPort = (unsigned)atoi(colon + 1);
+                } else {
+                    opt->controlPort = (unsigned)atoi(v);
+                }
+            }
+        } else if (strcmp(a, "--paused") == 0) {
+            opt->paused = 1;
+        } else if (starts(a, "--can=")) {
+            opt->canAllSpec = a + 6;
+        } else if (starts(a, "--can") && a[5] >= '0' && a[5] <= '9') {
+            unsigned n = (unsigned)atoi(a + 5);
+            const char *eq = strchr(a, '=');
+            if (eq == NULL || n >= 16u) {
+                fprintf(stderr, "bad option %s\n", a);
+                return -1;
+            }
+            opt->canSpec[n] = eq + 1;
         } else if (strcmp(a, "--resume") == 0) {
             /* reserved for reset emulation */
         } else {
@@ -111,11 +143,25 @@ int SilRt_Run(const SilRt_Options *opt, SilOs_CoreEntryFn entry) {
     }
     SilOs_Setup(&g_opt.os, entry);
     SilOs_SetShutdownCallback(on_shutdown);
+    if (g_opt.paused) SilOs_SetTimeLimit(0u);
+    SilCan_Setup();
+    {
+        unsigned n;
+        for (n = 0; n < SilCan_NumControllers(); ++n) {
+            const char *spec = g_opt.canSpec[n] != NULL ? g_opt.canSpec[n] : g_opt.canAllSpec;
+            if (spec != NULL) (void)SilCan_SetBus((uint8)n, spec);
+        }
+    }
+    if (g_opt.control && SilCtrl_Start(g_opt.controlHost, g_opt.controlPort, NULL) != 0) {
+        sil_log("control server failed to start");
+        return 3;
+    }
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
     SilOs_StartMaster();
     code = SilOs_WaitShutdown();
     SilRt_WriteTraces();
+    SilCtrl_Stop();
     if (!g_opt.quiet) sil_log("exit %d at t=%.6f s, %llu OS errors", code, (double)SilOs_ClockNow() / 1e9, (unsigned long long)SilOs_ErrorCount());
     fflush(stdout);
     fflush(stderr);

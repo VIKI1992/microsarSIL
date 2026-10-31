@@ -24,6 +24,7 @@ extern "C" {
 #define SILOS_CTX_ISR 2u
 
 #define SILOS_MAX_NEST 16u
+#define SILOS_MAX_VTIMERS 256u
 #define SILOS_PRIO_MAX 0xFFFFFFF0u
 #define SILOS_STATE_BUSY 0u
 #define SILOS_STATE_IDLE 1u
@@ -190,8 +191,10 @@ typedef struct {
     SilOs_ShutdownFn onShutdown;
     /* clock */
     volatile uint64 nowNs;
+    volatile uint64 timeLimitNs;
     uint64 hostOriginNs;
-    SilOs_VTimer vtimers[64];
+    SilOs_VTimer vtimers[SILOS_MAX_VTIMERS];
+    volatile uint32 firing;  /* virtual timer callbacks in flight (lock released) */
     uint32 vtimerNext;
     /* errors */
     Os_ErrorInformationType lastError;

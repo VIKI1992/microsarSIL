@@ -8,6 +8,7 @@
 #include "Os.h"
 #include "SilOs.h"
 #include "sil_runtime.h"
+#include "CanIf_Cbk.h"
 #include "sil_port.h"
 
 #include <stdio.h>
@@ -575,3 +576,9 @@ int main(int argc, char **argv) {
     if (r == 0 && g_failures != 0) r = 1;
     sil_process_exit(r);
 }
+
+/* the virtual CAN driver is linked but never initialised here: CanIf stand-ins */
+void CanIf_RxIndication(const Can_HwType *Mailbox, const PduInfoType *PduInfoPtr) { (void)Mailbox; (void)PduInfoPtr; }
+void CanIf_TxConfirmation(PduIdType CanTxPduId) { (void)CanTxPduId; }
+void CanIf_ControllerBusOff(uint8 ControllerId) { (void)ControllerId; }
+void CanIf_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode) { (void)ControllerId; (void)ControllerMode; }
